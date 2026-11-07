@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LOGIN_FAILED_MESSAGE, type MeResponse } from '@minton/types';
+import { apiPaths, LOGIN_FAILED_MESSAGE, type EventListResponse, type MeResponse } from '@minton/types';
 import { loadLastCircleLoginId, saveLastCircleLoginId } from '@/lib/lastCircle';
 import { queryKeys } from '@/lib/queryKeys';
 import { makeMe, renderRoute } from '@/test/render';
@@ -13,11 +13,13 @@ const me: MeResponse = {
   circle: { id: 'c1', circleLoginId: 'circle-a', name: 'サークルA' },
 };
 
-/** /events 以外の API（一覧など他担当の画面）は空で返す */
+const emptyEventList: EventListResponse = { events: [] };
+
+/** handler が返さない API は、イベント一覧（T2 の画面）なら契約どおりの空一覧、それ以外は空配列を返す */
 function stubFetch(handler: (url: string, init: RequestInit) => Response | undefined) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
-    return handler(url, init) ?? json(200, []);
+    return handler(url, init) ?? (url === apiPaths.events.list ? json(200, emptyEventList) : json(200, []));
   });
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
