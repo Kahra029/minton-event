@@ -72,3 +72,9 @@
 | C20 | セキュリティレビュー（T6） | Codex ではなく Claude で実施 |
 | C21 | API のディレクトリ構成 | apps/api を application / usecase / datasource の 3 層に分ける（Clean Architecture 風）。application = Hono の route・middleware・リクエストの検証・レスポンスへの変換。usecase = 業務ルールと、使うデータアクセスのインターフェース（port）。datasource = Drizzle / D1・Resend・WebCrypto を使った実装。依存の向きは application → usecase ← datasource。apps/web は今の機能ごとの構成のまま |
 | C22 | DI | ライブラリを使わない。依存を引数で渡し、依存を組み立てる関数（composition root）でリクエストごとに組み立てて、Hono の c.var に入れる |
+| C23 | T6 M-1: dev メール判定 | 明示的なフラグ（`.dev.vars` にだけ置く）で dev のログ出力を有効にする。フラグも RESEND_API_KEY も無い場合は送信エラー（C16 に従い revoked + 500）。C7 の「RESEND_API_KEY 未設定時」はこのフラグ判定に置き換える |
+| C24 | T6 M-2: invocation log | wrangler.jsonc で `observability.logs.invocation_logs: false`。アプリの構造化ログだけを残す |
+| C25 | T6 L-1: ログイン試行回数制限 | コード変更なし。デプロイ時にユーザーが Cloudflare Rate Limiting で `/api/auth/login` と `/api/invitations/*` を制限する |
+| C26 | T6 L-2: 期限切れ Session / Invitation の削除 | MVP では対応しない |
+| C27 | T6 L-3: circleLoginId の存在判別 | 対応しない（B12 / C13 どおり） |
+| C28 | T6 L-4: ID 生成の乱数の偏り | 修正する |
