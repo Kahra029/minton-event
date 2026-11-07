@@ -15,7 +15,8 @@
 | ホスティング | Cloudflare Workers + Pages |
 | ドメイン | Cloudflare Registrar |
 | リポジトリ構成 | minton-scheduler と同様（npm workspaces: `apps/api`, `apps/web`, `packages/types`） |
-| ライブラリ | minton-scheduler と同じ: Drizzle ORM, zod, dayjs, ulid, TanStack Query, react-hook-form, React Router, Tailwind CSS, shadcn/ui |
+| ライブラリ | minton-scheduler と同じ: Drizzle ORM, zod, dayjs, ulid, TanStack Query, react-hook-form, React Router, Tailwind CSS, shadcn/ui（Radix UI, lucide-react, class-variance-authority, clsx, tailwind-merge を含む）, ESLint |
+| テスト | vitest、@cloudflare/vitest-pool-workers（D1 integration）、Playwright（E2E）（2026-11-07 決定） |
 
 ## 認証・基盤
 
