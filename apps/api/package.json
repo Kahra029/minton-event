@@ -1,0 +1,24 @@
+{
+  "name": "api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@minton/types": "*",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.25",
+    "ulid": "^2.3.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.23.0",
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.4.0"
+  }
+}

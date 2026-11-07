@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+
+# cloudflare / wrangler
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# env
+.env
+.env.*
+!.env.example
+
+# playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# orca (仕様書の drop など)
+.orca/
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / os
+.DS_Store
+.idea/
+*.swp

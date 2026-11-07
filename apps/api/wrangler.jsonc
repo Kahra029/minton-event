@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "minton-event-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-15",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "minton-event",
+      // ローカル専用のプレースホルダ。remote の D1 はまだ作成していない（作成時に実 ID へ差し替える）
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
