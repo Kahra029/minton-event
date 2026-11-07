@@ -103,7 +103,7 @@ export async function readInvitationUrl(invitationId: string): Promise<string> {
   const logPath = process.env.E2E_DEV_LOG;
   if (!logPath) {
     throw new Error(
-      'E2E_DEV_LOG が未設定です。招待 URL は dev サーバーのログから取るため、`node e2e/run-local.mjs` で実行してください',
+      'E2E_DEV_LOG が未設定です。招待 URL は dev サーバーのログから取るため、`npm run test:e2e`（e2e/run-local.mjs）で実行してください',
     );
   }
   let found: string | undefined;

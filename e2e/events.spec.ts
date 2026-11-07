@@ -16,7 +16,7 @@ import {
 /**
  * Event 確認（一覧 → 詳細）と admin による Event 作成（guardrails §11）。
  * AC-01（ログイン後に自 Circle の一覧だけが見える）/ AC-03 / AC-04 / AC-20。
- * データはローカル D1 に作る（e2e/support/helpers.ts）。`node e2e/run-local.mjs` で実行する。
+ * データはローカル D1 に作る（e2e/support/helpers.ts）。`npm run test:e2e`（e2e/run-local.mjs）で実行する。
  */
 let circle: SeededCircle;
 let other: SeededCircle;
