@@ -7,8 +7,8 @@
     {
       "binding": "DB",
       "database_name": "minton-event",
-      // ローカル専用のプレースホルダ。remote の D1 はまだ作成していない（作成時に実 ID へ差し替える）
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // remote の D1（2026-11-07 作成、APAC）。Migration の remote 適用・デプロイはユーザーが行う
+      "database_id": "ed8ab48a-beea-4cfd-b7d4-8693484d2eaf",
       "migrations_dir": "migrations"
     }
   ],
