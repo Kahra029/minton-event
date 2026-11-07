@@ -1,0 +1,46 @@
+# 決定事項
+
+仕様書（`.orca/drops/badminton_*.md`）の未決事項について、ユーザーが決定した内容を記録する。
+ここに無い事項は未決とし、実装前にユーザーへ提案・確認する。
+
+決定日: 2026-11-07
+
+## 技術構成
+
+| 項目 | 決定 |
+|---|---|
+| フロント | React + TypeScript（Vite） |
+| バック | Hono（TypeScript） |
+| DB | Cloudflare D1 |
+| ホスティング | Cloudflare Workers + Pages |
+| ドメイン | Cloudflare Registrar |
+| リポジトリ構成 | minton-scheduler と同様（npm workspaces: `apps/api`, `apps/web`, `packages/types`） |
+| ライブラリ | minton-scheduler と同じ: Drizzle ORM, zod, dayjs, ulid, TanStack Query, react-hook-form, React Router, Tailwind CSS, shadcn/ui |
+
+## 認証・基盤
+
+| # | 項目 | 決定 |
+|---|---|---|
+| A2 | セッション | D1 にセッションを保存し、HttpOnly Cookie で渡す。セッションに Circle ID を持たせる。ログアウトでサーバー側から無効化 |
+| A3 | Password Hash | PBKDF2-SHA256（WebCrypto）、100,000 回、ユーザーごとにランダムな Salt |
+| A4 | 招待メール | Resend。API キーは Workers Secret。開発環境では実送信せずログ出力 |
+| A5 | 初期 Circle / admin 作成 | 運用者が実行する seed 用 CLI スクリプト |
+
+## ドメインルール
+
+| # | 項目 | 決定 |
+|---|---|---|
+| B1 | Event 削除 | 物理削除。Attendance は FK `ON DELETE CASCADE` |
+| B2 | Invitation 有効期限 | 7 日 |
+| B3 | expired 状態 | DB に保存せず、`Expires At` と比較して判定 |
+| B4 | revoked / 再送 | MVP では実装しない。同じ Email に再招待した場合、既存の pending を無効化 |
+| B5 | 既存 Member の Email への招待 | Conflict。pending 中の Email は B4 に従う |
+| B6 | Event Title | 任意。未入力時は日時・場所を見出しに表示 |
+| B7 | Event 一覧 | 今後の Event のみ、開始日時の昇順 |
+| B8 | タイムゾーン | DB は UTC、表示は JST |
+| B9 | ログアウト | 実装する |
+| B10 | パスワード再設定 | MVP では実装しない（運用手順は未決。B5 と衝突するため要検討） |
+| B11 | Member 削除 / Role 変更 | MVP では実装しない |
+| B12 | 存在しない circleLoginID | 404。ログイン失敗の文言は「メールアドレスまたはパスワードが違います」に統一 |
+| B13 | 日時の Validation | 終了日時 > 開始日時 のみ |
+| B14 | 別 Circle のリソース指定 | 404 Not Found（存在を開示しない） |
