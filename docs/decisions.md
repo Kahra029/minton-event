@@ -60,3 +60,4 @@
 | C8 | Event 詳細の Member 並び順 | 全 Member（未回答含む）を Display Name 昇順 |
 | C9 | 招待からの初回登録後 | Session を発行してログイン状態にし、イベント一覧へ遷移 |
 | C10 | 担当 | seed CLI は T1、メール送信は T4 |
+| C11 | 無効な招待 Token | 存在しない・accepted 済み・revoked・期限切れのすべてで 404 NOT_FOUND（理由を開示しない）。画面は「この招待URLは無効です」。accept 時に同じ Circle + Email の Member が既にいれば 409 |
