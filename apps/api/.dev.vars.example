@@ -1,7 +1,12 @@
 # ローカル開発用の Secret。`cp .dev.vars.example .dev.vars` して値を入れる（.dev.vars は gitignore 済み）。
 # 本番は `wrangler secret put` で登録する（T0 では登録しない）。
 
-# 招待メール送信（Resend）の API キー。未設定の開発環境では実送信せず招待 URL をログ出力する（decisions A4 / C7、実装は T4）
+# 開発環境用: 1 なら招待メールを実送信せず、招待 URL（Token を含む）をログ出力する（decisions C7 / C23）。
+# ローカル開発と E2E（npm run test:e2e）で必要。.dev.vars にだけ置き、wrangler.jsonc の vars や本番には置かない。
+# フラグも RESEND_API_KEY も無いと、招待作成は送信エラー（Invitation は revoked、500）になる
+DEV_MAIL_LOG=1
+
+# 招待メール送信（Resend）の API キー。DEV_MAIL_LOG=1 のときは使わない（decisions A4 / C23）
 # RESEND_API_KEY=
 
 # 招待 URL の基準となる web のオリジン（ローカルは Vite の dev サーバー）。未設定なら招待作成はエラー

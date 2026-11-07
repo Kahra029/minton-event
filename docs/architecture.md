@@ -32,7 +32,7 @@
 │   │   │   └── datasource/       port の実装
 │   │   │       ├── db/schema.ts, db/client.ts  Drizzle スキーマと getDb（共有）
 │   │   │       ├── d1/<feature>.ts   Repository の実装（Drizzle + D1）。sessions.ts は Session
-│   │   │       ├── mail.ts       招待メール（Resend / dev ログ: A4 / C7）
+│   │   │       ├── mail.ts       招待メール（Resend / dev ログ: A4 / C7 / C23）
 │   │   │       ├── password.ts   PBKDF2（A3）、crypto.ts  Token の生成とハッシュ、id.ts  ULID、clock.ts  現在時刻
 │   │   ├── scripts/              seed CLI（decisions A5 / C10）
 │   │   └── test/
@@ -66,7 +66,7 @@ web の app/・components/・lib/・test/）は編集しない。**
 | T1 認証 | `src/{application/routes,usecase,datasource/d1}/auth.ts`、`scripts/seed*`（A5）、`test/auth/**` | `src/features/auth/**`（LoginPage, LogoutButton） | `e2e/auth*.spec.ts` |
 | T2 Event | `src/{application/routes,usecase,datasource/d1}/events.ts`、`test/events/**` | `src/features/events/**` | `e2e/events*.spec.ts` |
 | T3 出欠 | `src/{application/routes,usecase,datasource/d1}/attendance.ts`、`test/attendance/**` | `src/features/attendance/**`（AttendanceButtons） | `e2e/attendance*.spec.ts` |
-| T4 招待・メンバー | `src/{application/routes,usecase,datasource/d1}/{invitations,members}.ts`、`src/datasource/mail.ts`（Resend 送信: A4 / C7）、`test/invitations/**`、`test/members/**` | `src/features/invitations/**`、`src/features/members/**` | `e2e/invitations*.spec.ts`、`e2e/members*.spec.ts` |
+| T4 招待・メンバー | `src/{application/routes,usecase,datasource/d1}/{invitations,members}.ts`、`src/datasource/mail.ts`（Resend 送信: A4 / C7 / C23）、`test/invitations/**`、`test/members/**` | `src/features/invitations/**`、`src/features/members/**` | `e2e/invitations*.spec.ts`、`e2e/members*.spec.ts` |
 
 補足:
 - 表の api のファイルは T7（3 層構成への移行）後のパス。各機能のテスト（`test/usecase/<feature>.test.ts` を含む）も担当範囲。
@@ -176,7 +176,10 @@ web の app/・components/・lib/・test/）は編集しない。**
 - 操作対象を追加するときは、route では `setLogContext(c, { eventId })`、usecase では `deps.log.addContext({ invitationId })`。
   追加のエラーログは usecase では `deps.log.error('event_name', {...})`、application では `log('error', 'event_name', {...})`
 - Password / Session Token / Invitation Token / Password Hash / API キーをログに渡さない（キー名で自動 `[REDACTED]` されるが、それに頼らない）。
-  例外: C7（RESEND_API_KEY 未設定の開発環境に限り招待 URL をログ出力してよい。`datasource/mail.ts` の devLogSender）
+  例外: C7 / C23（`.dev.vars` に `DEV_MAIL_LOG=1` を置いた開発環境に限り招待 URL をログ出力してよい。`datasource/mail.ts` の devLogSender）。
+  `DEV_MAIL_LOG` は wrangler.jsonc の vars・本番には置かない。フラグも `RESEND_API_KEY` も無い場合は送信エラー（C16 に従い revoked + 500）
+- Cloudflare の invocation log（リクエスト URL を含む）は wrangler.jsonc の `observability.logs.invocation_logs: false` で無効にしている（C24。招待 Token が URL パスにあるため）。
+  Workers Logs に残るのはアプリの構造化ログだけ
 
 ### 認証・Session（A2 / A3 / C1）
 - Password（`datasource/password.ts`、port は `PasswordHasher`）: PBKDF2-SHA256、100,000 回、Salt 16 bytes、定数時間比較。
@@ -226,9 +229,9 @@ web の app/・components/・lib/・test/）は編集しない。**
   fetch は `vi.stubGlobal('fetch', ...)` で差し替える
 - **E2E**（Playwright）: `e2e/*.spec.ts`。`npm run test:e2e`（`npm test` には含めない）。スマホ（iPhone 13 / Pixel 7）とデスクトップの project がある。
   - `npm run test:e2e`（= `node e2e/run-local.mjs`）は、5173 / 8787 が空いていることを確認してからこの worktree の `npm run dev` を起動し、
-    ローカル D1 に Migration を適用して Playwright を 1 worker で実行する（ポート使用中・`RESEND_API_KEY` 設定時は中止）。
+    ローカル D1 に Migration を適用して Playwright を 1 worker で実行する（ポート使用中・`DEV_MAIL_LOG=1` が無いとき・`RESEND_API_KEY` 設定時は中止）。
     Playwright の引数はそのまま渡せる: `npm run test:e2e -- --project=mobile-safari`
-  - 事前に `apps/api/.dev.vars`（`APP_BASE_URL` を含む）を用意する。招待 URL は dev ログから取る（decisions C7）
+  - 事前に `apps/api/.dev.vars`（`APP_BASE_URL` と `DEV_MAIL_LOG=1` を含む。`.dev.vars.example` のコピーでよい）を用意する。招待 URL は dev ログから取る（decisions C7 / C23）
   - テストデータは `e2e/support/helpers.ts`（seed CLI と API）でローカル D1 に毎回一意に作る
   初回は `npx playwright install chromium webkit`
 
@@ -236,12 +239,14 @@ web の app/・components/・lib/・test/）は編集しない。**
 
 ```sh
 npm install
-cp apps/api/.dev.vars.example apps/api/.dev.vars   # 必要な Secret があれば記入
+cp apps/api/.dev.vars.example apps/api/.dev.vars   # DEV_MAIL_LOG=1（招待 URL をログに出す: C23）と APP_BASE_URL が入っている
 npm run db:migrate:local                            # ローカル D1 に Migration を適用（apps/api/.wrangler/ に保存）
 npm run dev                                         # api: http://127.0.0.1:8787 / web: http://localhost:5173
 curl http://localhost:5173/api/health               # → {"ok":true}（Vite proxy 経由で api に届く）
 ```
 
+- 招待メールは `DEV_MAIL_LOG=1` なら実送信せず、招待 URL を wrangler dev のログ（`invitation_mail_dev`）に出す（C7 / C23）。
+  本番では `DEV_MAIL_LOG` を置かず、`RESEND_API_KEY`（Secret）と `MAIL_FROM` を設定する。どちらも無いと招待作成は 500 になる
 - web の dev サーバーは `/api` を wrangler dev に proxy する（同一オリジンなので Session Cookie がそのまま使える）
 - Circle / admin の初期データは seed CLI（T1 が `apps/api/scripts/` に作成）で投入する
 - `wrangler.jsonc` の `database_id` はプレースホルダ。remote の D1 作成・デプロイ・Secret 登録は別途行う

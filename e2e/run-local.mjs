@@ -4,9 +4,9 @@
 //   例: npm run test:e2e -- --project=mobile-chrome
 //
 // 1. 5173 / 8787 が空いていることを確認する（他の worktree のサーバーを使わない。使用中なら中止）
-// 2. apps/api/.dev.vars を確認する（APP_BASE_URL 必須。RESEND_API_KEY が設定されていたら実送信を避けるため中止）
+// 2. apps/api/.dev.vars を確認する（APP_BASE_URL と DEV_MAIL_LOG=1 が必須。RESEND_API_KEY が設定されていたら実送信を避けるため中止）
 // 3. ローカル D1 に Migration を適用する（--local のみ。remote には触れない）
-// 4. `npm run dev` を起動し、出力を権限 600 の一時ファイルに保存する（招待 URL は dev ログから取る: decisions C7）
+// 4. `npm run dev` を起動し、出力を権限 600 の一時ファイルに保存する（招待 URL は dev ログから取る: decisions C7 / C23）
 // 5. playwright test を E2E_DEV_LOG 付き・既定 1 worker で実行し、終了後にサーバーを止めてログを削除する
 import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
@@ -47,6 +47,9 @@ if (!fs.existsSync(devVarsPath)) {
 const devVars = fs.readFileSync(devVarsPath, 'utf8');
 if (/^\s*RESEND_API_KEY\s*=\s*\S/m.test(devVars)) {
   fail('apps/api/.dev.vars に RESEND_API_KEY が設定されています。E2E は招待メールを実送信しないよう未設定で実行します');
+}
+if (!/^\s*DEV_MAIL_LOG\s*=\s*"?1"?\s*$/m.test(devVars)) {
+  fail('apps/api/.dev.vars に DEV_MAIL_LOG=1 がありません。招待 URL を dev ログから取るため必要です（decisions C23）');
 }
 if (!/^\s*APP_BASE_URL\s*=\s*\S/m.test(devVars)) {
   fail('apps/api/.dev.vars に APP_BASE_URL がありません（例: APP_BASE_URL=http://localhost:5173）');

@@ -6,7 +6,12 @@ export type { AuthMember };
 /** Cloudflare Workers のバインディング / 環境変数 / Secret（composition.ts が datasource の組み立てに使う） */
 export type Bindings = {
   DB: D1Database;
-  /** Resend の API キー（Secret）。未設定なら dev 扱いで実送信しない（A4 / C7） */
+  /**
+   * "1" なら招待メールを実送信せず招待 URL をログに出す（開発環境用: C7 / C23）。
+   * `.dev.vars` にだけ置き、wrangler.jsonc の vars・本番には置かない
+   */
+  DEV_MAIL_LOG?: string;
+  /** Resend の API キー（Secret）。DEV_MAIL_LOG も RESEND_API_KEY も無ければ招待メールは送信エラー（C23 / C16） */
   RESEND_API_KEY?: string;
   /** 招待メールの送信元アドレス（vars）。RESEND_API_KEY 設定時に未設定なら送信エラー */
   MAIL_FROM?: string;

@@ -10,6 +10,7 @@
 
 ```sh
 npm install
+cp apps/api/.dev.vars.example apps/api/.dev.vars   # DEV_MAIL_LOG=1: 招待メールを送らず招待 URL をログに出す（開発用のみ。decisions C23）
 npm run db:migrate:local
 npm run dev
 npm run typecheck && npm run lint && npm test

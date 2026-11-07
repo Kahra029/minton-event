@@ -15,11 +15,17 @@
   // 本番の値はデプロイ時にユーザーが入れる。ローカルは .dev.vars で上書きする（.dev.vars.example 参照）
   "vars": {
     // 招待メールの送信元アドレス（Resend）。RESEND_API_KEY 設定時に未設定なら送信エラー（T4）
+    // 開発用の DEV_MAIL_LOG（招待 URL のログ出力: C23）はここには置かない。.dev.vars にだけ置く
     "MAIL_FROM": "",
     // 招待 URL の基準（web のオリジン。例: https://example.com）。未設定なら招待作成はエラー（T4）
     "APP_BASE_URL": ""
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      // Cloudflare が自動で出す invocation log（リクエスト URL を含む）は無効にする。
+      // 招待 Token が URL パスにあるため（decisions C24 / T6 M-2）。アプリの構造化ログ（console 出力）は残る
+      "invocation_logs": false
+    }
   }
 }

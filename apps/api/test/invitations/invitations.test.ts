@@ -42,7 +42,10 @@ const tokenFromUrl = (url: string) => decodeURIComponent(new URL(url).pathname.s
 
 const APP_BASE_URL = 'https://app.example.test';
 
-/** 招待作成。env は wrangler.jsonc の vars（空）に APP_BASE_URL などを上書きして渡す */
+/**
+ * 招待作成。env は wrangler.jsonc の vars（空）に APP_BASE_URL などを上書きして渡す。
+ * 既定は dev のメールログ（DEV_MAIL_LOG=1: C23）。実送信や未設定を試すときは DEV_MAIL_LOG: undefined で上書きする
+ */
 const invite = (
   cookie: string,
   email: string,
@@ -56,7 +59,7 @@ const invite = (
       headers: { ...(cookie ? { Cookie: cookie } : {}), 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({ email }),
     },
-    { ...env, APP_BASE_URL, ...envOverrides },
+    { ...env, APP_BASE_URL, DEV_MAIL_LOG: '1', ...envOverrides },
   );
 
 const accept = (token: string, body: Record<string, unknown>) =>
@@ -176,6 +179,7 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify({ id: 'mail-1' }), { status: 200 }));
     const res = await invite(adminCookie, 'prod@example.com', {
+      DEV_MAIL_LOG: undefined,
       RESEND_API_KEY: 're_test_key',
       MAIL_FROM: 'Minton <noreply@example.test>',
     });
@@ -228,7 +232,11 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response('{"message":"error"}', { status: resendStatus ?? 200 }));
-    const res = await invite(adminCookie, 'fail@example.com', { RESEND_API_KEY: 're_test_key', ...overrides });
+    const res = await invite(adminCookie, 'fail@example.com', {
+      DEV_MAIL_LOG: undefined,
+      RESEND_API_KEY: 're_test_key',
+      ...overrides,
+    });
     expect(res.status).toBe(500);
     const json = (await res.json()) as ApiErrorResponse;
     expect(json.error).toEqual({ code: 'INTERNAL_ERROR', message: expect.any(String) });
@@ -247,6 +255,76 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
     expect(lines.join('\n')).not.toMatch(/invitations\/[A-Za-z0-9_-]{20,}/);
     expect(lines.join('\n')).not.toContain('re_test_key');
   });
+});
+
+describe('C23: 招待メールの送信手段は DEV_MAIL_LOG フラグで明示的に判定する', () => {
+  /** fetch を止め、Resend が呼ばれたかを見る */
+  const stubFetch = () =>
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ id: 'mail-1' }), { status: 200 }));
+
+  it('C23: DEV_MAIL_LOG=1 なら実送信せず招待 URL をログに出す（RESEND_API_KEY があってもフラグを優先）', async () => {
+    const { circle, adminCookie } = await setupCircle();
+    const lines = captureLogs();
+    const fetchSpy = stubFetch();
+    const res = await invite(adminCookie, 'devflag@example.com', {
+      DEV_MAIL_LOG: '1',
+      RESEND_API_KEY: 're_test_key',
+      MAIL_FROM: 'noreply@example.test',
+    });
+    expect(res.status).toBe(201);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const [row] = await invitationRows(circle.id, 'devflag@example.com');
+    expect(row.status).toBe('pending');
+    const token = tokenFromUrl(invitationUrlFromLogs(lines));
+    expect(row.tokenHash).toBe(await hashToken(token));
+  });
+
+  it('C23: フラグなし・RESEND_API_KEY ありなら Resend に送信し、dev ログは出さない', async () => {
+    const { circle, adminCookie } = await setupCircle();
+    const lines = captureLogs();
+    const fetchSpy = stubFetch();
+    const res = await invite(adminCookie, 'resend@example.com', {
+      DEV_MAIL_LOG: undefined,
+      RESEND_API_KEY: 're_test_key',
+      MAIL_FROM: 'noreply@example.test',
+    });
+    expect(res.status).toBe(201);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.resend.com/emails');
+    const [row] = await invitationRows(circle.id, 'resend@example.com');
+    expect(row.status).toBe('pending');
+    expect(lines.join('\n')).not.toContain('invitation_mail_dev');
+  });
+
+  it.each([
+    ['未設定', undefined],
+    ['"1" 以外', 'true'],
+  ])(
+    'C23: フラグ%s・RESEND_API_KEY なしなら送信エラーで、Invitation を revoked にして 500（C16）。Token はログに出さない',
+    async (_label, flag) => {
+      const { circle, adminCookie } = await setupCircle();
+      const lines = captureLogs();
+      const fetchSpy = stubFetch();
+      const res = await invite(adminCookie, 'nomail@example.com', {
+        DEV_MAIL_LOG: flag,
+        RESEND_API_KEY: undefined,
+        MAIL_FROM: 'noreply@example.test',
+      });
+      expect(res.status).toBe(500);
+      const json = (await res.json()) as ApiErrorResponse;
+      expect(json.error).toEqual({ code: 'INTERNAL_ERROR', message: expect.any(String) });
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      const rows = await invitationRows(circle.id, 'nomail@example.com');
+      expect(rows.map((r) => r.status)).toEqual(['revoked']);
+      const failed = parseLines(lines).find((e) => e.message === 'invitation_mail_failed');
+      expect(failed).toMatchObject({ level: 'error', circleId: circle.id, invitationId: rows[0].id });
+
+      const all = lines.join('\n');
+      expect(all).not.toContain('invitation_mail_dev');
+      expect(all).not.toMatch(/invitations\/[A-Za-z0-9_-]{20,}/);
+    },
+  );
 });
 
 describe('GET /api/invitations/:token', () => {
