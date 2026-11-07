@@ -64,3 +64,7 @@
 | C12 | 本番 D1 | minton-scheduler と同じ Cloudflare アカウントを使うが、D1 データベースは別に作る（`wrangler d1 create minton-event`）。テーブル名（members, events）と Migration 名（0001_init.sql）が scheduler と衝突するため、DB は共有しない。作成と `database_id` の設定はユーザーが行う |
 | C13 | 存在しない circleLoginId の文言 | 「サークルが見つかりません」（404） |
 | C14 | 本番 D1 の作成 | 2026-11-07 に `minton-event`（APAC、database_id `ed8ab48a-beea-4cfd-b7d4-8693484d2eaf`）を作成し wrangler.jsonc に設定済み。remote への Migration 適用・デプロイはユーザーが行う |
+| C15 | 招待メールの送信元 | wrangler.jsonc の vars に `MAIL_FROM` を追加（値はデプロイ時にユーザーが設定）。本番で未設定なら送信エラー |
+| C16 | 招待メールの送信失敗時 | その Invitation を revoked にしてから 500 INTERNAL_ERROR |
+| C17 | 招待 URL の origin | リクエストからではなく設定値 `APP_BASE_URL`（vars）から生成。※未設定時に招待作成をエラーにする点はオーケストレータが T4 に指示したもので、ユーザー確認待ち |
+| C18 | 招待で作成される Member の Role | member 固定 |
