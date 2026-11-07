@@ -5,6 +5,10 @@ export type Bindings = {
   DB: D1Database;
   /** Resend の API キー（Secret）。未設定なら dev 扱いで実送信しない（A4 / C7。利用は T4） */
   RESEND_API_KEY?: string;
+  /** 招待メールの送信元アドレス（vars）。RESEND_API_KEY 設定時に未設定なら送信エラー（T4） */
+  MAIL_FROM?: string;
+  /** 招待 URL の基準となる web のオリジン（vars。例: https://example.com）。未設定なら招待作成はエラー（T4） */
+  APP_BASE_URL?: string;
 };
 
 /** requireAuth が c.var.member にセットするログイン中の Member */

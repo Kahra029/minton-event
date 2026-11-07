@@ -12,6 +12,13 @@
       "migrations_dir": "migrations"
     }
   ],
+  // 本番の値はデプロイ時にユーザーが入れる。ローカルは .dev.vars で上書きする（.dev.vars.example 参照）
+  "vars": {
+    // 招待メールの送信元アドレス（Resend）。RESEND_API_KEY 設定時に未設定なら送信エラー（T4）
+    "MAIL_FROM": "",
+    // 招待 URL の基準（web のオリジン。例: https://example.com）。未設定なら招待作成はエラー（T4）
+    "APP_BASE_URL": ""
+  },
   "observability": {
     "enabled": true
   }

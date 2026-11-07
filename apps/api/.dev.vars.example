@@ -3,3 +3,9 @@
 
 # 招待メール送信（Resend）の API キー。未設定の開発環境では実送信せず招待 URL をログ出力する（decisions A4 / C7、実装は T4）
 # RESEND_API_KEY=
+
+# 招待 URL の基準となる web のオリジン（ローカルは Vite の dev サーバー）。未設定なら招待作成はエラー
+APP_BASE_URL=http://localhost:5173
+
+# 招待メールの送信元アドレス（RESEND_API_KEY を設定して実送信するときのみ必要）
+# MAIL_FROM=
