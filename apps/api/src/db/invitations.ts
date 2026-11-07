@@ -107,3 +107,13 @@ export async function acceptInvitation(
   ]);
   return inserted.meta.changes === 1;
 }
+
+/** 招待メールの送信に失敗した Invitation を無効化する（pending のときだけ） */
+export async function revokeInvitation(db: DB, circleId: string, invitationId: string): Promise<void> {
+  await db
+    .update(invitations)
+    .set({ status: 'revoked' })
+    .where(
+      and(eq(invitations.circleId, circleId), eq(invitations.id, invitationId), eq(invitations.status, 'pending')),
+    );
+}

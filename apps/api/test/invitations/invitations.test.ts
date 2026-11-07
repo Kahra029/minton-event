@@ -39,8 +39,24 @@ function invitationUrlFromLogs(lines: string[]): string {
 
 const tokenFromUrl = (url: string) => decodeURIComponent(new URL(url).pathname.split('/').pop()!);
 
-const invite = (cookie: string, email: string) =>
-  request('/api/invitations', { method: 'POST', cookie, body: { email } });
+const APP_BASE_URL = 'https://app.example.test';
+
+/** 招待作成。env は wrangler.jsonc の vars（空）に APP_BASE_URL などを上書きして渡す */
+const invite = (
+  cookie: string,
+  email: string,
+  envOverrides: Record<string, string | undefined> = {},
+  headers: Record<string, string> = {},
+) =>
+  app.request(
+    'http://localhost/api/invitations',
+    {
+      method: 'POST',
+      headers: { ...(cookie ? { Cookie: cookie } : {}), 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ email }),
+    },
+    { ...env, APP_BASE_URL, ...envOverrides },
+  );
 
 const accept = (token: string, body: Record<string, unknown>) =>
   request(`/api/invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body });
@@ -78,7 +94,7 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
 
     // dev 経路でメール送信処理が呼ばれ、招待 URL が出る（C7）
     const url = invitationUrlFromLogs(lines);
-    expect(url).toMatch(/^http:\/\/localhost\/invitations\//);
+    expect(url).toMatch(/^https:\/\/app\.example\.test\/invitations\//);
     const token = tokenFromUrl(url);
     expect(token.length).toBeGreaterThanOrEqual(43); // 256 bit の base64url
     expect(row.tokenHash).toBe(await hashToken(token));
@@ -152,35 +168,83 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
     expect(res.status).toBe(201);
   });
 
-  it('RESEND_API_KEY 設定時は Resend API を呼び、招待 URL・Token をログに出さない', async () => {
+  it('RESEND_API_KEY 設定時は MAIL_FROM から Resend API を呼び、招待 URL・Token・API キーをログに出さない', async () => {
     const { adminCookie } = await setupCircle();
     const lines = captureLogs();
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify({ id: 'mail-1' }), { status: 200 }));
-    const res = await app.request(
-      'http://localhost/api/invitations',
-      {
-        method: 'POST',
-        headers: { Cookie: adminCookie, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'prod@example.com' }),
-      },
-      { ...env, RESEND_API_KEY: 're_test_key' },
-    );
+    const res = await invite(adminCookie, 'prod@example.com', {
+      RESEND_API_KEY: 're_test_key',
+      MAIL_FROM: 'Minton <noreply@example.test>',
+    });
     expect(res.status).toBe(201);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://api.resend.com/emails');
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer re_test_key');
-    const payload = JSON.parse(init.body as string) as { to: string[]; text: string };
+    const payload = JSON.parse(init.body as string) as { from: string; to: string[]; text: string };
+    expect(payload.from).toBe('Minton <noreply@example.test>');
     expect(payload.to).toEqual(['prod@example.com']);
-    const mailUrl = payload.text.match(/http:\/\/localhost\/invitations\/\S+/)![0];
+    const mailUrl = payload.text.match(/https:\/\/app\.example\.test\/invitations\/\S+/)![0];
     const token = tokenFromUrl(mailUrl);
 
     const all = lines.join('\n');
     expect(all).not.toContain('invitation_mail_dev');
     expect(all).not.toContain(token);
     expect(all).not.toContain('re_test_key');
+  });
+
+  it('招待 URL は APP_BASE_URL から作り、Host / Origin ヘッダーは使わない（末尾の / は除く）', async () => {
+    const { adminCookie } = await setupCircle();
+    const lines = captureLogs();
+    const res = await invite(
+      adminCookie,
+      'host@example.com',
+      { APP_BASE_URL: 'https://app.example.test/' },
+      { Host: 'evil.example', 'X-Forwarded-Host': 'evil.example' },
+    );
+    expect(res.status).toBe(201);
+    expect(invitationUrlFromLogs(lines)).toMatch(/^https:\/\/app\.example\.test\/invitations\/[^/]+$/);
+  });
+
+  it('APP_BASE_URL 未設定なら 500 で、Invitation は作らない', async () => {
+    const { circle, adminCookie } = await setupCircle();
+    const lines = captureLogs();
+    const res = await invite(adminCookie, 'nobase@example.com', { APP_BASE_URL: '' });
+    expect(res.status).toBe(500);
+    expect(await errorCode(res)).toBe('INTERNAL_ERROR');
+    expect(await invitationRows(circle.id, 'nobase@example.com')).toHaveLength(0);
+    expect(lines.some((l) => l.includes('app_base_url_not_configured'))).toBe(true);
+  });
+
+  it.each([
+    ['Resend がエラーを返す', { MAIL_FROM: 'noreply@example.test' }, 500],
+    ['MAIL_FROM が未設定', { MAIL_FROM: '' }, null],
+  ])('送信失敗（%s）なら Invitation を revoked にして 500。Token はログに出さない', async (_label, overrides, resendStatus) => {
+    const { circle, adminCookie } = await setupCircle();
+    const lines = captureLogs();
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"message":"error"}', { status: resendStatus ?? 200 }));
+    const res = await invite(adminCookie, 'fail@example.com', { RESEND_API_KEY: 're_test_key', ...overrides });
+    expect(res.status).toBe(500);
+    const json = (await res.json()) as ApiErrorResponse;
+    expect(json.error).toEqual({ code: 'INTERNAL_ERROR', message: expect.any(String) });
+    expect(fetchSpy).toHaveBeenCalledTimes(resendStatus ? 1 : 0);
+
+    const rows = await invitationRows(circle.id, 'fail@example.com');
+    expect(rows.map((r) => r.status)).toEqual(['revoked']);
+    // 一覧にも出ない（C6）
+    const list = (await (await request('/api/members', { cookie: adminCookie })).json()) as {
+      invitations: { email: string }[];
+    };
+    expect(list.invitations.map((i) => i.email)).not.toContain('fail@example.com');
+
+    const failed = parseLines(lines).find((e) => e.message === 'invitation_mail_failed');
+    expect(failed).toMatchObject({ level: 'error', circleId: circle.id, invitationId: rows[0].id });
+    expect(lines.join('\n')).not.toMatch(/invitations\/[A-Za-z0-9_-]{20,}/);
+    expect(lines.join('\n')).not.toContain('re_test_key');
   });
 });
 
