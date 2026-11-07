@@ -146,6 +146,11 @@ api/src/middleware/*、api/test/helpers.ts、web の app/・components/・lib/�
 - **web**（vitest + jsdom + Testing Library）: `apps/web/src/**/*.test.tsx`。`src/test/render.tsx` の `renderRoute(path, { me })` で実際のルーターで描画し、
   fetch は `vi.stubGlobal('fetch', ...)` で差し替える
 - **E2E**（Playwright）: `e2e/*.spec.ts`。`npm run test:e2e`（`npm test` には含めない）。スマホ（iPhone 13 / Pixel 7）とデスクトップの project がある。
+  - `npm run test:e2e`（= `node e2e/run-local.mjs`）は、5173 / 8787 が空いていることを確認してからこの worktree の `npm run dev` を起動し、
+    ローカル D1 に Migration を適用して Playwright を 1 worker で実行する（ポート使用中・`RESEND_API_KEY` 設定時は中止）。
+    Playwright の引数はそのまま渡せる: `npm run test:e2e -- --project=mobile-safari`
+  - 事前に `apps/api/.dev.vars`（`APP_BASE_URL` を含む）を用意する。招待 URL は dev ログから取る（decisions C7）
+  - テストデータは `e2e/support/helpers.ts`（seed CLI と API）でローカル D1 に毎回一意に作る
   初回は `npx playwright install chromium webkit`
 
 ## 6. ローカル起動

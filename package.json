@@ -13,7 +13,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.e2e.json",
     "lint": "eslint .",
     "test": "npm run test --workspaces --if-present",
-    "test:e2e": "playwright test",
+    "test:e2e": "node e2e/run-local.mjs",
     "db:migrate:local": "npm run db:migrate:local --workspace apps/api"
   },
   "devDependencies": {

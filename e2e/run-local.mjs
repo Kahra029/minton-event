@@ -1,7 +1,7 @@
 // E2E をこの worktree のコードとローカル D1 に対して実行する（担当: T5）。
 //
-//   node e2e/run-local.mjs [playwright test の引数...]
-//   例: node e2e/run-local.mjs --project=mobile-chrome
+//   npm run test:e2e [-- playwright test の引数...]（= node e2e/run-local.mjs）
+//   例: npm run test:e2e -- --project=mobile-chrome
 //
 // 1. 5173 / 8787 が空いていることを確認する（他の worktree のサーバーを使わない。使用中なら中止）
 // 2. apps/api/.dev.vars を確認する（APP_BASE_URL 必須。RESEND_API_KEY が設定されていたら実送信を避けるため中止）
