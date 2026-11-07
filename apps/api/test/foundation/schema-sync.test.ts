@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { is } from 'drizzle-orm';
 import { getTableConfig, SQLiteTable } from 'drizzle-orm/sqlite-core';
-import * as schema from '../../src/db/schema';
+import * as schema from '../../src/datasource/db/schema';
 
 const tables: SQLiteTable[] = Object.values(schema).filter((v) => is(v, SQLiteTable));
 

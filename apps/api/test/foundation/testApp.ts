@@ -1,17 +1,26 @@
 import { env } from 'cloudflare:workers';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { AppEnv } from '../../src/bindings';
-import { getDb } from '../../src/db/client';
-import { conflict, errorHandler, forbidden, notFound, notFoundHandler, parseJsonBody, unauthorized, validationError } from '../../src/lib/errors';
-import { createSession, destroySession } from '../../src/lib/session';
-import { requireAdmin, requireAuth } from '../../src/middleware/auth';
-import { requestLogger } from '../../src/middleware/requestLogger';
+import type { AppEnv } from '../../src/application/env';
+import { errorHandler, notFoundHandler, parseJsonBody } from '../../src/application/errors';
+import { requireAdmin, requireAuth } from '../../src/application/middleware/auth';
+import { requestLogger } from '../../src/application/middleware/requestLogger';
+import { provideUsecases } from '../../src/application/middleware/usecases';
+import { clearSessionCookie, readSessionToken, setSessionCookie } from '../../src/application/sessionCookie';
+import { composeUsecases } from '../../src/composition';
+import { createSessionRepository } from '../../src/datasource/d1/sessions';
+import { getDb } from '../../src/datasource/db/client';
+import { webCryptoTokens } from '../../src/datasource/crypto';
+import { nowUtcIso } from '../../src/datasource/clock';
+import { newId } from '../../src/datasource/id';
+import { conflict, forbidden, notFound, unauthorized, validationError } from '../../src/usecase/errors';
+import { issueSession } from '../../src/usecase/session';
 
-/** 基盤テスト用の小さな app（本番の index.ts と同じ middleware / エラーハンドラを使う） */
+/** 基盤テスト用の小さな app（本番の application/app.ts と同じ middleware / エラーハンドラを使う） */
 export function buildTestApp() {
   const app = new Hono<AppEnv>();
-  app.use('*', requestLogger);
+  app.use('*', requestLogger(newId));
+  app.use('*', provideUsecases(composeUsecases));
   app.onError(errorHandler);
   app.notFound(notFoundHandler);
 
@@ -40,14 +49,16 @@ export function buildTestApp() {
   app.get('/auth', requireAuth, (c) => c.json(c.get('member')));
   app.get('/admin', requireAdmin, (c) => c.json(c.get('member')));
   app.post('/session/:circleId/:memberId', async (c) => {
-    await createSession(c, getDb(c.env.DB), {
-      circleId: c.req.param('circleId'),
-      memberId: c.req.param('memberId'),
-    });
+    const { token } = await issueSession(
+      { sessions: createSessionRepository(getDb(c.env.DB)), tokens: webCryptoTokens, now: nowUtcIso },
+      { circleId: c.req.param('circleId'), memberId: c.req.param('memberId') },
+    );
+    setSessionCookie(c, token);
     return c.body(null, 204);
   });
   app.post('/logout', async (c) => {
-    await destroySession(c, getDb(c.env.DB));
+    await c.get('usecases').auth.logout(readSessionToken(c));
+    clearSessionCookie(c);
     return c.body(null, 204);
   });
   app.get('/invitations/:token', (c) => c.json({ ok: true }));

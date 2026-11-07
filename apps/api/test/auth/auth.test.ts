@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { LOGIN_FAILED_MESSAGE, type ApiErrorResponse, type MeResponse } from '@minton/types';
-import { sessions } from '../../src/db/schema';
-import { hashToken } from '../../src/lib/crypto';
+import { sessions } from '../../src/datasource/db/schema';
+import { hashToken } from '../../src/datasource/crypto';
 import {
   createCircle,
   createMember,

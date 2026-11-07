@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import type { EventDetailResponse, EventListResponse, EventResponse } from '@minton/types';
-import { attendances, events } from '../../src/db/schema';
-import { addMs, DAY_MS, nowUtcIso } from '../../src/lib/time';
+import { attendances, events } from '../../src/datasource/db/schema';
+import { addMs, DAY_MS } from '../../src/usecase/time';
+import { nowUtcIso } from '../../src/datasource/clock';
 import { createAttendance, createEvent, createMember, db, errorCode, request, sessionCookie, setupCircle } from '../helpers';
 
 const HOUR_MS = 60 * 60 * 1000;

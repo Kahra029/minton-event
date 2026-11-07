@@ -10,13 +10,18 @@
 import { env } from 'cloudflare:workers';
 import type { ApiErrorResponse, Role } from '@minton/types';
 import app from '../src/index';
-import { getDb } from '../src/db/client';
-import { attendances, circles, events, invitations, members } from '../src/db/schema';
-import { generateToken, hashToken } from '../src/lib/crypto';
-import { newId } from '../src/lib/id';
-import { hashPassword } from '../src/lib/password';
-import { issueSession, SESSION_COOKIE_NAME } from '../src/lib/session';
-import { addMs, DAY_MS, nowUtcIso } from '../src/lib/time';
+import { getDb } from '../src/datasource/db/client';
+import { attendances, circles, events, invitations, members } from '../src/datasource/db/schema';
+import { generateToken, hashToken } from '../src/datasource/crypto';
+import { newId } from '../src/datasource/id';
+import { hashPassword } from '../src/datasource/password';
+import { SESSION_COOKIE_NAME } from '../src/application/sessionCookie';
+import { createSessionRepository } from '../src/datasource/d1/sessions';
+import { webCryptoTokens } from '../src/datasource/crypto';
+import { issueSession } from '../src/usecase/session';
+import type { AuthMember } from '../src/usecase/ports';
+import { addMs, DAY_MS } from '../src/usecase/time';
+import { nowUtcIso } from '../src/datasource/clock';
 
 export const db = () => getDb(env.DB);
 
@@ -137,8 +142,16 @@ export async function createInvitation(params: {
 
 /** ログイン済みの Session を DB に直接作り、Cookie ヘッダの値（"session=..."）を返す */
 export async function sessionCookie(member: Pick<TestMember, 'id' | 'circleId'>): Promise<string> {
-  const { token } = await issueSession(db(), { circleId: member.circleId, memberId: member.id });
+  const { token } = await issueSession(sessionDeps(), { circleId: member.circleId, memberId: member.id });
   return `${SESSION_COOKIE_NAME}=${token}`;
+}
+
+/** 本番と同じ datasource で Session を発行・検証するための依存 */
+export const sessionDeps = () => ({ sessions: createSessionRepository(db()), tokens: webCryptoTokens, now: nowUtcIso });
+
+/** Session Token から有効な Session の Member を返す（無効・期限切れなら null） */
+export async function verifySessionToken(token: string): Promise<AuthMember | null> {
+  return sessionDeps().sessions.findMemberByTokenHash(await webCryptoTokens.hash(token), nowUtcIso());
 }
 
 /** Circle と admin / member を 1 人ずつ作る */

@@ -3,10 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import { INVITATION_INVALID_MESSAGE, type ApiErrorResponse, type MeResponse } from '@minton/types';
 import app from '../../src/index';
-import { invitations, members } from '../../src/db/schema';
-import { hashToken } from '../../src/lib/crypto';
-import { verifySessionToken } from '../../src/lib/session';
-import { addMs, DAY_MS, nowUtcIso } from '../../src/lib/time';
+import { invitations, members } from '../../src/datasource/db/schema';
+import { hashToken } from '../../src/datasource/crypto';
+import { addMs, DAY_MS } from '../../src/usecase/time';
+import { nowUtcIso } from '../../src/datasource/clock';
 import {
   createInvitation,
   createMember,
@@ -15,6 +15,7 @@ import {
   request,
   sessionFromSetCookie,
   setupCircle,
+  verifySessionToken,
 } from '../helpers';
 
 afterEach(() => vi.restoreAllMocks());
@@ -309,7 +310,7 @@ describe('POST /api/invitations/:token/accept（AC-15 / AC-16 / AC-17）', () =>
     // ログイン状態（Session Cookie が発行され、その Circle の Member として有効）
     const session = sessionFromSetCookie(res);
     expect(session).toBeTruthy();
-    expect(await verifySessionToken(db(), session!)).toEqual({ id: me.member.id, circleId: circle.id, role: 'member' });
+    expect(await verifySessionToken(session!)).toEqual({ id: me.member.id, circleId: circle.id, role: 'member' });
     // Circle 利用可能: 認証必須 API が通る（member なので admin 専用は 403）
     expect((await request('/api/members', { cookie: `session=${session}` })).status).toBe(403);
 

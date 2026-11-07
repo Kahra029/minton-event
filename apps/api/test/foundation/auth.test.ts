@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { sessions } from '../../src/db/schema';
-import { hashToken } from '../../src/lib/crypto';
-import { SESSION_TTL_MS } from '../../src/lib/session';
-import { addMs, nowUtcIso } from '../../src/lib/time';
+import { sessions } from '../../src/datasource/db/schema';
+import { hashToken } from '../../src/datasource/crypto';
+import { SESSION_TTL_MS } from '../../src/usecase/session';
+import { addMs } from '../../src/usecase/time';
+import { nowUtcIso } from '../../src/datasource/clock';
 import { createCircle, createMember, db, sessionCookie, sessionFromSetCookie, setupCircle } from '../helpers';
 import { testRequest } from './testApp';
 

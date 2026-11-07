@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hashPassword, PBKDF2_ITERATIONS, verifyPassword } from '../../src/lib/password';
+import { hashPassword, PBKDF2_ITERATIONS, verifyPassword } from '../../src/datasource/password';
 
 describe('password', () => {
   it('PBKDF2-SHA256 / 100,000 回の形式で保存し、平文を含まない', async () => {

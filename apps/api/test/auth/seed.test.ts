@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:workers';
 import { LIMITS } from '@minton/types';
 import { buildSeedSql, hashSeedPassword, SEED_LIMITS, SEED_PBKDF2_ITERATIONS, validateSeedInput } from '../../scripts/seed-core';
-import { newId } from '../../src/lib/id';
-import { PBKDF2_ITERATIONS, verifyPassword } from '../../src/lib/password';
-import { nowUtcIso } from '../../src/lib/time';
+import { newId } from '../../src/datasource/id';
+import { PBKDF2_ITERATIONS, verifyPassword } from '../../src/datasource/password';
+import { nowUtcIso } from '../../src/datasource/clock';
 import { request } from '../helpers';
 
 const validInput = {

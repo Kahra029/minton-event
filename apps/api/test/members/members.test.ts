@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MemberListResponse } from '@minton/types';
-import { addMs, nowUtcIso } from '../../src/lib/time';
+import { addMs } from '../../src/usecase/time';
+import { nowUtcIso } from '../../src/datasource/clock';
 import { createInvitation, createMember, errorCode, request, setupCircle } from '../helpers';
 
 const list = async (cookie: string) => {

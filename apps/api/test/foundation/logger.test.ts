@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { redact } from '../../src/lib/logger';
+import { redact } from '../../src/application/logger';
 import { setupCircle } from '../helpers';
 import { testRequest } from './testApp';
 

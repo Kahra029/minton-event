@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { attendances, events } from '../../src/db/schema';
+import { attendances, events } from '../../src/datasource/db/schema';
 import { createAttendance, createCircle, createEvent, createMember, db, setupCircle } from '../helpers';
 
 describe('DB スキーマの制約', () => {

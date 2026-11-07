@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 import type { AttendanceResponse } from '@minton/types';
-import { attendances, members } from '../../src/db/schema';
+import { attendances, members } from '../../src/datasource/db/schema';
 import {
   createAttendance,
   createEvent,

@@ -2,7 +2,7 @@
  * seed CLI（decisions A5 / C10）の中身。Node（scripts/seed.ts）と vitest（Workers）の両方から import するので、
  * WebCrypto / btoa など両方にある API と zod だけを使う（src/ は拡張子なし import のため Node から直接読めない）。
  *
- * - Password Hash は src/lib/password.ts と同じ形式（pbkdf2_sha256$<iterations>$<salt>$<hash>）。
+ * - Password Hash は src/datasource/password.ts と同じ形式（pbkdf2_sha256$<iterations>$<salt>$<hash>）。
  *   互換性は test/auth/seed.test.ts で verifyPassword により検証している。
  * - 入力の制約は decisions C5 / packages/types と同じ（同じくテストで一致を確認）。
  */
@@ -42,7 +42,7 @@ function toBase64(buf: Uint8Array): string {
   return btoa(s);
 }
 
-/** src/lib/password.ts の hashPassword と同じ形式の PBKDF2-SHA256 ハッシュ（A3） */
+/** src/datasource/password.ts の hashPassword と同じ形式の PBKDF2-SHA256 ハッシュ（A3） */
 export async function hashSeedPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, [
