@@ -45,3 +45,18 @@
 | B12 | 存在しない circleLoginID | 404。ログイン失敗の文言は「メールアドレスまたはパスワードが違います」に統一 |
 | B13 | 日時の Validation | 終了日時 > 開始日時 のみ |
 | B14 | 別 Circle のリソース指定 | 404 Not Found（存在を開示しない） |
+
+## 追加決定（2026-11-07）
+
+| # | 項目 | 決定 |
+|---|---|---|
+| C1 | Session 有効期限 | 30 日固定。アクセスによる延長はしない（期限切れで再ログイン） |
+| C2 | web の circleLoginId 保持 | ログイン成功時に最後の circleLoginId を localStorage に保存。未ログイン時は `/login/<保存値>` へリダイレクト。保存値が無ければ「ログインURLを確認してください」の案内画面。ログアウト後も同様 |
+| C3 | web テスト Library | @testing-library/react、@testing-library/jest-dom、jsdom を devDependencies に追加 |
+| C4 | 「今後の Event」（B7） | `end_at > 現在`（開催中を含む） |
+| C5 | 入力値の制約 | Password 8〜128 文字、Display Name 1〜50 文字、Location 必須 1〜100 文字、Title 0〜100 文字。Email は trim + 小文字化して保存・照合 |
+| C6 | メンバー一覧 API | 登録済み Member と未登録 Invitation を別配列で返す。Invitation は pending / expired（期限切れ表示）のみ。accepted・revoked は出さない |
+| C7 | dev の招待 URL ログ | 開発環境（RESEND_API_KEY 未設定時）に限り、招待 URL（Token を含む）をログ出力してよい（A4 と guardrails §13 の衝突に対する例外）。本番では出さない |
+| C8 | Event 詳細の Member 並び順 | 全 Member（未回答含む）を Display Name 昇順 |
+| C9 | 招待からの初回登録後 | Session を発行してログイン状態にし、イベント一覧へ遷移 |
+| C10 | 担当 | seed CLI は T1、メール送信は T4 |
