@@ -68,3 +68,5 @@
 | C16 | 招待メールの送信失敗時 | その Invitation を revoked にしてから 500 INTERNAL_ERROR |
 | C17 | 招待 URL の origin | リクエストからではなく設定値 `APP_BASE_URL`（vars）から生成。未設定なら招待作成をエラーにする（URL を推測しない） |
 | C18 | 招待で作成される Member の Role | member 固定 |
+| C19 | E2E の実行 | `npm run test:e2e` で `node e2e/run-local.mjs` を実行する（dev ログから招待 URL を取得するため）。ローカル D1 の SQLITE_BUSY 回避のため並列数は 1 |
+| C20 | セキュリティレビュー（T6） | Codex ではなく Claude で実施 |
