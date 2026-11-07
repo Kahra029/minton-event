@@ -70,3 +70,5 @@
 | C18 | 招待で作成される Member の Role | member 固定 |
 | C19 | E2E の実行 | `npm run test:e2e` で `node e2e/run-local.mjs` を実行する（dev ログから招待 URL を取得するため）。ローカル D1 の SQLITE_BUSY 回避のため並列数は 1 |
 | C20 | セキュリティレビュー（T6） | Codex ではなく Claude で実施 |
+| C21 | API のディレクトリ構成 | apps/api を application / usecase / datasource の 3 層に分ける（Clean Architecture 風）。application = Hono の route・middleware・リクエストの検証・レスポンスへの変換。usecase = 業務ルールと、使うデータアクセスのインターフェース（port）。datasource = Drizzle / D1・Resend・WebCrypto を使った実装。依存の向きは application → usecase ← datasource。apps/web は今の機能ごとの構成のまま |
+| C22 | DI | ライブラリを使わない。依存を引数で渡し、依存を組み立てる関数（composition root）でリクエストごとに組み立てて、Hono の c.var に入れる |
