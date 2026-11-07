@@ -91,7 +91,7 @@ export function buildInvitationUrl(baseUrl: string, token: string): string {
 }
 
 /** 使える招待は pending かつ期限内だけ（B3: expired は保存せず expires_at <= 現在 で判定） */
-export function isInvitationWithCircle(invitation: Pick<InvitationRecord, 'status' | 'expiresAt'>, now: string): boolean {
+export function isUsableInvitation(invitation: Pick<InvitationRecord, 'status' | 'expiresAt'>, now: string): boolean {
   return invitation.status === 'pending' && invitation.expiresAt > now;
 }
 
@@ -99,7 +99,7 @@ export function createInvitationUsecase(deps: InvitationDeps) {
   /** 存在しない・accepted・revoked・期限切れはすべて同じ 404（C11: 理由を区別しない） */
   async function findUsableOr404(token: string, now: string): Promise<InvitationWithCircle> {
     const found = await deps.invitations.findByTokenHash(await deps.tokens.hash(token));
-    if (!found || !isInvitationWithCircle(found.invitation, now)) throw notFound(INVITATION_INVALID_MESSAGE);
+    if (!found || !isUsableInvitation(found.invitation, now)) throw notFound(INVITATION_INVALID_MESSAGE);
     deps.log.addContext({ circleId: found.circle.id, invitationId: found.invitation.id });
     return found;
   }

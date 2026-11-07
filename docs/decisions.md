@@ -78,3 +78,4 @@
 | C26 | T6 L-2: 期限切れ Session / Invitation の削除 | MVP では対応しない |
 | C27 | T6 L-3: circleLoginId の存在判別 | 対応しない（B12 / C13 どおり） |
 | C28 | T6 L-4: ID 生成の乱数の偏り | 修正する |
+| C29 | DEV_MAIL_LOG の判定 | 値が `1` のときだけ有効。DEV_MAIL_LOG=1 と RESEND_API_KEY が両方ある場合はフラグを優先してログ出力（本番には DEV_MAIL_LOG を置かない運用） |

@@ -38,7 +38,7 @@ export function createAttendanceUsecase(deps: AttendanceDeps) {
       if (!(await deps.attendances.memberExists(circleId, params.memberId))) throw notFound('メンバーが見つかりません');
       if (params.memberId !== member.id) throw forbidden('他のメンバーの出欠は変更できません');
 
-      const row = await deps.attendances.upsert({ id: deps.newId(), circleId, ...params, now: deps.now() });
+      const row = await deps.attendances.upsert({ ...params, id: deps.newId(), circleId, now: deps.now() });
       if (!row) throw internalError();
       return row;
     },
