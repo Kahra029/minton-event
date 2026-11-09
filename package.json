@@ -10,6 +10,8 @@
   ],
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "build": "npm run build --workspace apps/web",
+    "deploy": "npm run build && npm run deploy --workspace apps/api",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.e2e.json",
     "lint": "eslint .",
     "test": "npm run test --workspaces --if-present",

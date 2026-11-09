@@ -8,10 +8,17 @@ import { Label } from '@/components/ui/label';
 import { errorMessage, isApiError } from '@/lib/api';
 import { useCreateInvitation } from './api';
 
-/** メンバー招待フォーム（AC-13）。メンバー一覧の上部に置く */
+type CreatedInvitation = { email: string; url: string };
+
+/**
+ * メンバー招待フォーム（AC-13）。メンバー一覧の上部に置く。
+ * メールは送らない（C31）。作成直後のレスポンスの招待 URL をここにだけ表示し、admin がコピーして本人に渡す。
+ * Token はハッシュだけ保存されるため再表示はできない（state にだけ持ち、保存しない）。
+ */
 export function InviteForm() {
   const createInvitation = useCreateInvitation();
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [created, setCreated] = useState<CreatedInvitation | null>(null);
+  const [copied, setCopied] = useState(false);
   const form = useForm<CreateInvitationRequest>({
     resolver: zodResolver(createInvitationRequestSchema),
     defaultValues: { email: '' },
@@ -19,16 +26,27 @@ export function InviteForm() {
   const { errors, isSubmitting } = form.formState;
 
   const onSubmit = form.handleSubmit(async (values) => {
-    setSentTo(null);
+    setCreated(null);
+    setCopied(false);
     try {
       const res = await createInvitation.mutateAsync(values);
-      setSentTo(res.invitation.email);
+      setCreated({ email: res.invitation.email, url: res.invitationUrl });
       form.reset();
     } catch (e) {
       const fieldError = isApiError(e) ? e.details?.fieldErrors?.email?.[0] : undefined;
       form.setError('root', { message: fieldError ?? errorMessage(e) });
     }
   });
+
+  const copy = async () => {
+    if (!created) return;
+    try {
+      await navigator.clipboard.writeText(created.url);
+      setCopied(true);
+    } catch {
+      // コピーできない環境では、表示中の URL を選択してコピーしてもらう
+    }
+  };
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-2" aria-label="メンバー招待">
@@ -52,10 +70,24 @@ export function InviteForm() {
           {errors.root.message}
         </p>
       )}
-      {sentTo && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {sentTo} に招待メールを送信しました
-        </p>
+      {created && (
+        <div className="flex flex-col gap-2 rounded-xl border p-3">
+          <p role="status" className="text-sm">
+            {created.email} の招待URLを作成しました
+          </p>
+          <div className="flex gap-2">
+            <Input
+              readOnly
+              value={created.url}
+              aria-label="招待URL"
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <Button type="button" variant="outline" className="shrink-0" onClick={copy}>
+              {copied ? 'コピーしました' : 'コピー'}
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">この URL は再表示できません。コピーして本人に渡してください</p>
+        </div>
       )}
     </form>
   );

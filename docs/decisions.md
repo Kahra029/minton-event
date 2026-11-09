@@ -88,3 +88,4 @@
 | C31 | 招待の届け方 | メールは送らない。招待作成の直後に、作成した admin の画面にだけ招待 URL（Token を含む）とコピーボタンを表示し、admin が LINE などで本人に渡す。Token は今どおりハッシュだけ保存するため、あとから再表示はできない（必要なら同じ Email に再招待し、B4 で古い招待は無効化）。AC-13 の「招待Email送信」はこの方式に置き換える |
 | C32 | メール送信処理 | Resend の送信処理・`MAIL_FROM`・`RESEND_API_KEY`・`DEV_MAIL_LOG` と関連テストを削除する。A4・C7・C15・C16・C23・C29 は廃止。E2E は dev ログではなく画面に表示された招待 URL を使う |
 | C33 | 試行回数制限（C25 の置き換え） | workers.dev では Cloudflare の Rate Limiting ルールが使えないため、Workers の Rate Limiting バインディングで `/api/auth/login` と招待の受け入れに IP 単位の制限を入れる（超えたら 429）。C25 は廃止 |
+| C34 | T10 の細部（C33 / C31） | ①E2E はテストごとにランダムな `CF-Connecting-IP` ヘッダーを付けて回数制限を避ける（アプリ側の変更なし）②login と招待受け入れは別々に数える（key `login:<IP>` / `accept:<IP>`）③IP ヘッダーが無いときは key `unknown` で制限する ④429 は code `TOO_MANY_REQUESTS`、文言「試行回数が多すぎます。しばらくしてから再度お試しください」。ボディ・Token の検証より前に全リクエストを数える ⑤招待作成のレスポンスは `{ invitation, invitationUrl }`（201）⑥招待 URL の案内文は「この URL は再表示できません。コピーして本人に渡してください」。コピーは navigator.clipboard.writeText で、成功したらボタンを「コピーしました」にする |

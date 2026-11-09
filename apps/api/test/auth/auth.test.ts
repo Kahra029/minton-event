@@ -12,7 +12,9 @@ import {
   request,
   sessionCookie,
   sessionFromSetCookie,
+  sendUntilLimited,
   setupCircle,
+  uniqueIp,
 } from '../helpers';
 
 const login = (body: unknown, cookie?: string) => request('/api/auth/login', { method: 'POST', body, cookie });
@@ -234,5 +236,45 @@ describe('GET /api/auth/me', () => {
       member: { id: member.id, email: member.email, displayName: member.displayName, role: 'member' },
       circle: { id: circle.id, circleLoginId: circle.circleLoginId, name: circle.name },
     });
+  });
+});
+
+describe('POST /api/auth/login の試行回数制限（C33 / C34）', () => {
+  const loginFrom = (ip: string | null, body: unknown) => request('/api/auth/login', { method: 'POST', body, ip });
+  const TOO_MANY = { code: 'TOO_MANY_REQUESTS', message: '試行回数が多すぎます。しばらくしてから再度お試しください' };
+
+  it('同じ IP から 60 秒に 10 回を超えると 429 TOO_MANY_REQUESTS（入力の検証より前に数え、正しい認証情報でも制限する）', async () => {
+    const { circle, admin } = await setupCircle();
+    const ip = uniqueIp();
+    // 失敗（不正な入力・Password 違い）も数える
+    let n = 0;
+    const res = await sendUntilLimited(
+      () =>
+        loginFrom(
+          ip,
+          n++ % 2 === 0
+            ? { circleLoginId: '' }
+            : { circleLoginId: circle.circleLoginId, email: admin.email, password: 'wrong-password' },
+        ),
+      (r) => expect([400, 401]).toContain(r.status),
+    );
+    expect(((await res.json()) as ApiErrorResponse).error).toEqual(TOO_MANY);
+
+    const correct = { circleLoginId: circle.circleLoginId, email: admin.email, password: DEFAULT_PASSWORD };
+    const limited = await loginFrom(ip, correct);
+    expect(limited.status).toBe(429);
+    expect(sessionFromSetCookie(limited)).toBeNull();
+
+    // 別の IP からはログインできる
+    expect((await loginFrom(uniqueIp(), correct)).status).toBe(200);
+  });
+
+  it('CF-Connecting-IP が無いリクエストは unknown として 1 つにまとめて数える', async () => {
+    const body = { circleLoginId: 'no-such-circle-xyz', email: 'a@example.com', password: 'whatever1' };
+    const res = await sendUntilLimited(
+      () => loginFrom(null, body),
+      (r) => expect(r.status).toBe(404),
+    );
+    expect(((await res.json()) as ApiErrorResponse).error).toEqual(TOO_MANY);
   });
 });

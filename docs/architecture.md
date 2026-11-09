@@ -8,7 +8,8 @@
 ```text
 .
 ├── apps/
-│   ├── api/                      Hono + Cloudflare Workers + D1 + Drizzle（3 層構成: §3。decisions C21 / C22）
+│   ├── api/                      Hono + Cloudflare Workers + D1 + Drizzle（3 層構成: §3。decisions C21 / C22）。
+│   │                             本番は web の静的アセットもこの Worker から配信する（§7 / C30）
 │   │   ├── migrations/           D1 Migration（手書き SQL。src/datasource/db/schema.ts と一致させる）
 │   │   ├── src/
 │   │   │   ├── index.ts          エントリ（wrangler の main）。createApp に composition root と ID 生成を渡す
@@ -19,20 +20,21 @@
 │   │   │   │   ├── errors.ts     errorHandler / notFoundHandler / parseJsonBody / parseParams（共有）
 │   │   │   │   ├── logger.ts     log / redact / setLogContext / usecase に渡す RequestLogger（共有）
 │   │   │   │   ├── sessionCookie.ts  Session Cookie の読み書き（共有）
-│   │   │   │   ├── middleware/   requestLogger / provideUsecases / requireAuth / requireAdmin（共有）
+│   │   │   │   ├── middleware/   requestLogger / provideUsecases / requireAuth / requireAdmin / rateLimit（共有）
 │   │   │   │   └── routes/<feature>.ts  機能ごとの Hono app（検証 → usecase → レスポンス）
-│   │   │   ├── usecase/          業務ルールと port。Hono / Drizzle / D1 / Resend / WebCrypto / Workers に依存しない
+│   │   │   ├── usecase/          業務ルールと port。Hono / Drizzle / D1 / WebCrypto / Workers に依存しない
 │   │   │   │   ├── index.ts      Usecases（c.var.usecases の型）
-│   │   │   │   ├── errors.ts     AppError と validationError / unauthorized / forbidden / notFound / conflict / internalError
+│   │   │   │   ├── errors.ts     AppError と validationError / unauthorized / forbidden / notFound / conflict / tooManyRequests / internalError
 │   │   │   │   ├── ports.ts      機能間で共有する port（Now / NewId / TokenService / PasswordHasher / RequestLogger）と AuthMember
 │   │   │   │   ├── authorization.ts  assertAdmin
 │   │   │   │   ├── session.ts    Session の発行（issueSession）・SessionRepository・有効期限（C1）
 │   │   │   │   ├── time.ts       toUtcIso / addMs / DAY_MS（純粋な関数）
+│   │   │   │   ├── rateLimit.ts  試行回数制限（C33 / C34）と RateLimiter の port
 │   │   │   │   └── <feature>.ts  機能ごとの usecase（create<Feature>Usecase）とその Repository の port
 │   │   │   └── datasource/       port の実装
 │   │   │       ├── db/schema.ts, db/client.ts  Drizzle スキーマと getDb（共有）
 │   │   │       ├── d1/<feature>.ts   Repository の実装（Drizzle + D1）。sessions.ts は Session
-│   │   │       ├── mail.ts       招待メール（Resend / dev ログ: A4 / C7 / C23）
+│   │   │       ├── rateLimit.ts  RateLimiter の実装（Workers Rate Limiting バインディング: C33）
 │   │   │       ├── password.ts   PBKDF2（A3）、crypto.ts  Token の生成とハッシュ、id.ts  ULID、clock.ts  現在時刻
 │   │   ├── scripts/              seed CLI（decisions A5 / C10）
 │   │   └── test/
@@ -66,7 +68,7 @@ web の app/・components/・lib/・test/）は編集しない。**
 | T1 認証 | `src/{application/routes,usecase,datasource/d1}/auth.ts`、`scripts/seed*`（A5）、`test/auth/**` | `src/features/auth/**`（LoginPage, LogoutButton） | `e2e/auth*.spec.ts` |
 | T2 Event | `src/{application/routes,usecase,datasource/d1}/events.ts`、`test/events/**` | `src/features/events/**` | `e2e/events*.spec.ts` |
 | T3 出欠 | `src/{application/routes,usecase,datasource/d1}/attendance.ts`、`test/attendance/**` | `src/features/attendance/**`（AttendanceButtons） | `e2e/attendance*.spec.ts` |
-| T4 招待・メンバー | `src/{application/routes,usecase,datasource/d1}/{invitations,members}.ts`、`src/datasource/mail.ts`（Resend 送信: A4 / C7 / C23）、`test/invitations/**`、`test/members/**` | `src/features/invitations/**`、`src/features/members/**` | `e2e/invitations*.spec.ts`、`e2e/members*.spec.ts` |
+| T4 招待・メンバー | `src/{application/routes,usecase,datasource/d1}/{invitations,members}.ts`、`test/invitations/**`、`test/members/**` | `src/features/invitations/**`、`src/features/members/**` | `e2e/invitations*.spec.ts`、`e2e/members*.spec.ts` |
 
 補足:
 - 表の api のファイルは T7（3 層構成への移行）後のパス。各機能のテスト（`test/usecase/<feature>.test.ts` を含む）も担当範囲。
@@ -86,7 +88,7 @@ web の app/・components/・lib/・test/）は編集しない。**
             ┌──────────────┐        ┌───────────┐        ┌────────────────┐
  HTTP ───▶ │ application  │ ─────▶ │  usecase  │ ◀───── │   datasource   │
             │ Hono・zod    │  呼ぶ   │ 業務ルール │  実装   │ Drizzle/D1・   │
-            │ Cookie・ログ │        │ と port    │        │ Resend・Crypto │
+            │ Cookie・ログ │        │ と port    │        │ Crypto・RateLim│
             └──────────────┘        └───────────┘        └────────────────┘
                     ▲                     ▲                       ▲
                     └──── index.ts / composition.ts（composition root）が組み立てる
@@ -95,8 +97,8 @@ web の app/・components/・lib/・test/）は編集しない。**
 | 層 | 責務 | 依存してよいもの |
 |---|---|---|
 | `application/` | Hono の route・middleware（requestLogger / provideUsecases / requireAuth / requireAdmin）・エラーハンドラ、zod によるリクエスト検証、Cookie、usecase の結果をレスポンス（JSON・ステータス）にすること、リクエストログ | hono、zod、`@minton/types`、usecase |
-| `usecase/` | 機能ごとの業務ルール（権限の判定、Circle 境界、出欠の upsert ルール、招待の状態遷移、B3 / B4 / B5 / C11 / C16 など）と、そのために使う port（Repository・メール送信・Password・Token・時刻・ID・ログ）のインターフェース | `@minton/types`、usecase 内のファイルだけ |
-| `datasource/` | port の実装（Drizzle + D1 の Repository、Resend / dev ログのメール送信、PBKDF2、Token の生成とハッシュ、ULID、時刻）と Drizzle スキーマ | drizzle-orm、ulid、WebCrypto、usecase（port の型） |
+| `usecase/` | 機能ごとの業務ルール（権限の判定、Circle 境界、出欠の upsert ルール、招待の状態遷移、試行回数制限の key と 429、B3 / B4 / B5 / C11 / C33 など）と、そのために使う port（Repository・RateLimiter・Password・Token・時刻・ID・ログ）のインターフェース | `@minton/types`、usecase 内のファイルだけ |
+| `datasource/` | port の実装（Drizzle + D1 の Repository、Workers Rate Limiting、PBKDF2、Token の生成とハッシュ、ULID、時刻）と Drizzle スキーマ | drizzle-orm、ulid、WebCrypto、Workers のバインディング、usecase（port の型） |
 
 - 依存の向きは **application → usecase ← datasource**。usecase は application / datasource / composition を import しない。
   application は datasource を、datasource は application / Hono を import しない。
@@ -107,8 +109,8 @@ web の app/・components/・lib/・test/）は編集しない。**
 - **DI**: ライブラリは使わない。usecase は `create<Feature>Usecase(deps)` というファクトリで依存を引数で受け取り、メソッドを持つオブジェクトを返す
   （クラスは使わない。Repository の実装も `create<Feature>Repository(db)` で統一）。
 - **port は usecase が実際に使うメソッドだけ**を持つ。汎用の `Repository<T>`・基底クラス・抽象ファクトリ・イベントバスは作らない。
-  1 つの関数で足りる port は関数型にする（`Now` / `NewId` / `MailSender`）。
-- エラーは usecase から `usecase/errors.ts` の `AppError`（validationError / unauthorized / forbidden / notFound / conflict / internalError）を throw する。
+  1 つの関数で足りる port は関数型にする（`Now` / `NewId` / `RateLimiter`）。
+- エラーは usecase から `usecase/errors.ts` の `AppError`（validationError / unauthorized / forbidden / notFound / conflict / tooManyRequests / internalError）を throw する。
   application の `errorHandler` が ApiErrorResponse に変換する。
 - **権限の判定は usecase が持つ**。admin 専用の usecase は先頭で `assertAdmin(member)` を呼ぶ。
   route の `requireAdmin` も同じ `assertAdmin` を使い、入力の検証より前に 401 / 403 を返す（判定順: 401 → 403 → 400）。
@@ -120,7 +122,7 @@ web の app/・components/・lib/・test/）は編集しない。**
   ①権限の判定（assertAdmin）・Circle の決定（ログイン中の Member の circleId を使う）・時刻の取得を usecase に集めるため、
   ②route が datasource を直接使わないという規則に例外を作らないため、usecase を通す。usecase 1 機能 = 1 ファイルにまとめ、
   メソッドごとのファイルやクラスは作らない。
-- 初回登録（`POST /api/invitations/:token/accept`）は「Token の検証（404）→ 入力の検証（400）→ 登録」の順を守るため、
+- 初回登録（`POST /api/invitations/:token/accept`）は「試行回数制限（429）→ Token の検証（404）→ 入力の検証（400）→ 登録」の順を守るため、
   usecase の `prepareAccept(token)` が Token を検証して登録用の関数を返す 2 段構成にしている。
 
 ### 新しい機能（API）を追加するときの手順
@@ -164,7 +166,8 @@ web の app/・components/・lib/・test/）は編集しない。**
   usecase でも `assertAdmin` を呼ぶ
 
 ### エラー
-- `usecase/errors.ts` のヘルパーを throw する: `validationError()` 400 / `unauthorized()` 401 / `forbidden()` 403 / `notFound()` 404 / `conflict()` 409。
+- `usecase/errors.ts` のヘルパーを throw する: `validationError()` 400 / `unauthorized()` 401 / `forbidden()` 403 / `notFound()` 404 / `conflict()` 409 /
+  `tooManyRequests()` 429。
   それ以外の例外は 500 INTERNAL_ERROR になり、メッセージ・stack trace は返さない
 - レスポンス形式は `ApiErrorResponse`: `{ "error": { "code": "NOT_FOUND", "message": "...", "details"?: {...} } }`
 - `message` は Client に表示されるので日本語のユーザー向け文言にし、内部情報や秘密情報を入れない
@@ -175,11 +178,18 @@ web の app/・components/・lib/・test/）は編集しない。**
   circleId / memberId / errorCode / timestamp。実パス・クエリ・ボディ・Cookie は記録しない
 - 操作対象を追加するときは、route では `setLogContext(c, { eventId })`、usecase では `deps.log.addContext({ invitationId })`。
   追加のエラーログは usecase では `deps.log.error('event_name', {...})`、application では `log('error', 'event_name', {...})`
-- Password / Session Token / Invitation Token / Password Hash / API キーをログに渡さない（キー名で自動 `[REDACTED]` されるが、それに頼らない）。
-  例外: C7 / C23（`.dev.vars` に `DEV_MAIL_LOG=1` を置いた開発環境に限り招待 URL をログ出力してよい。`datasource/mail.ts` の devLogSender）。
-  `DEV_MAIL_LOG` は wrangler.jsonc の vars・本番には置かない。フラグも `RESEND_API_KEY` も無い場合は送信エラー（C16 に従い revoked + 500）
+- Password / Session Token / Invitation Token / 招待 URL / Password Hash をログに渡さない（キー名で自動 `[REDACTED]` されるが、それに頼らない）。
+  例外は無い。招待 URL（Token を含む）は招待作成のレスポンス（作成した admin）にだけ返す（C31。メール送信と dev ログ出力は C32 で廃止）
 - Cloudflare の invocation log（リクエスト URL を含む）は wrangler.jsonc の `observability.logs.invocation_logs: false` で無効にしている（C24。招待 Token が URL パスにあるため）。
   Workers Logs に残るのはアプリの構造化ログだけ
+
+### 試行回数制限（C33 / C34）
+- 対象は `POST /api/auth/login` と `POST /api/invitations/:token/accept`。route に `rateLimit('login' | 'accept')`（`application/middleware/rateLimit.ts`）を
+  ボディ・Token の検証より前に付ける。成功・失敗を問わず全リクエストを数え、超えたら 429 `TOO_MANY_REQUESTS`
+- IP は `CF-Connecting-IP`。key は `login:<IP>` / `accept:<IP>`（別々に数える）。ヘッダーが無ければ `unknown` として数える（`usecase/rateLimit.ts`）
+- 上限は wrangler.jsonc の `ratelimits`（`AUTH_RATE_LIMITER`、60 秒あたり 10 回）。実装は `datasource/rateLimit.ts`
+- ローカル（wrangler dev / vitest）でも制限がかかる。integration テストの `request()` はリクエストごとにランダムな `CF-Connecting-IP` を付ける（`ip` で固定・`null` で無し）。
+  E2E はコンテキストごとにランダムな `CF-Connecting-IP` を付ける（`e2e/support/helpers.ts`。ローカルはヘッダーがあれば上書きされない。本番は Cloudflare が上書きする）
 
 ### 認証・Session（A2 / A3 / C1）
 - Password（`datasource/password.ts`、port は `PasswordHasher`）: PBKDF2-SHA256、100,000 回、Salt 16 bytes、定数時間比較。
@@ -229,9 +239,11 @@ web の app/・components/・lib/・test/）は編集しない。**
   fetch は `vi.stubGlobal('fetch', ...)` で差し替える
 - **E2E**（Playwright）: `e2e/*.spec.ts`。`npm run test:e2e`（`npm test` には含めない）。スマホ（iPhone 13 / Pixel 7）とデスクトップの project がある。
   - `npm run test:e2e`（= `node e2e/run-local.mjs`）は、5173 / 8787 が空いていることを確認してからこの worktree の `npm run dev` を起動し、
-    ローカル D1 に Migration を適用して Playwright を 1 worker で実行する（ポート使用中・`DEV_MAIL_LOG=1` が無いとき・`RESEND_API_KEY` 設定時は中止）。
+    ローカル D1 に Migration を適用して Playwright を 1 worker で実行する（ポート使用中・`APP_BASE_URL` が無いときは中止）。
     Playwright の引数はそのまま渡せる: `npm run test:e2e -- --project=mobile-safari`
-  - 事前に `apps/api/.dev.vars`（`APP_BASE_URL` と `DEV_MAIL_LOG=1` を含む。`.dev.vars.example` のコピーでよい）を用意する。招待 URL は dev ログから取る（decisions C7 / C23）
+  - 事前に `apps/api/.dev.vars`（`.dev.vars.example` のコピーでよい）を用意する。招待 URL は画面（API なら招待作成のレスポンス）から取る（C32）
+  - spec は `@playwright/test` ではなく `e2e/support/helpers.ts` の `test` / `expect` を使う（試行回数制限を避けるランダムな `CF-Connecting-IP`: C34）。
+    手動で作るコンテキストには `extraHTTPHeaders: randomIpHeaders()` を渡す
   - テストデータは `e2e/support/helpers.ts`（seed CLI と API）でローカル D1 に毎回一意に作る
   初回は `npx playwright install chromium webkit`
 
@@ -239,17 +251,23 @@ web の app/・components/・lib/・test/）は編集しない。**
 
 ```sh
 npm install
-cp apps/api/.dev.vars.example apps/api/.dev.vars   # DEV_MAIL_LOG=1（招待 URL をログに出す: C23）と APP_BASE_URL が入っている
+cp apps/api/.dev.vars.example apps/api/.dev.vars   # APP_BASE_URL（招待 URL の基準）が入っている
 npm run db:migrate:local                            # ローカル D1 に Migration を適用（apps/api/.wrangler/ に保存）
 npm run dev                                         # api: http://127.0.0.1:8787 / web: http://localhost:5173
 curl http://localhost:5173/api/health               # → {"ok":true}（Vite proxy 経由で api に届く）
 ```
 
-- 招待メールは `DEV_MAIL_LOG=1` なら実送信せず、招待 URL を wrangler dev のログ（`invitation_mail_dev`）に出す（C7 / C23）。
-  本番では `DEV_MAIL_LOG` を置かず、`RESEND_API_KEY`（Secret）と `MAIL_FROM` を設定する。どちらも無いと招待作成は 500 になる
-- web の dev サーバーは `/api` を wrangler dev に proxy する（同一オリジンなので Session Cookie がそのまま使える）
-- Circle / admin の初期データは seed CLI（T1 が `apps/api/scripts/` に作成）で投入する
-- `wrangler.jsonc` の `database_id` はプレースホルダ。remote の D1 作成・デプロイ・Secret 登録は別途行う
+- 招待はメールを送らない。招待作成の直後にメンバー一覧の画面に招待 URL とコピーボタンが出る（C31）。Secret は不要
+- web の dev サーバーは `/api` を wrangler dev に proxy する（同一オリジンなので Session Cookie がそのまま使える）。
+  `apps/api` の `predev` が `apps/web/dist` を作る（wrangler.jsonc の `assets.directory` が無いと wrangler dev が起動しないため。中身は空でよい）
+- Circle / admin の初期データは seed CLI（`apps/api/scripts/seed.ts`）で投入する
+
+### 本番の構成（C30）
+- Worker 1 つ（`minton-event-api`）で Web と API を配信し、`https://minton-event-api.<account>.workers.dev` で公開する（独自ドメイン・Pages は使わない）
+- `apps/api/wrangler.jsonc` の `assets`: `directory` は `../web/dist`（`npm run build` の出力）、`not_found_handling: single-page-application`
+  （ファイルが無いパスは index.html）、`run_worker_first: ["/api/*"]`（`/api/*` は必ず Worker が処理し、存在しない API は JSON の 404）
+- 同一オリジンなので Cookie・CSRF の方式はローカルと同じ。`APP_BASE_URL` はこの workers.dev の URL
+- `wrangler.jsonc` の `database_id` は本番の D1（C14）。デプロイ手順は [deploy.md](deploy.md)（`npm run deploy` = build してから wrangler deploy）
 
 ## 8. DB / Migration
 - テーブル: circles / members / sessions / events / attendances / invitations（`apps/api/src/datasource/db/schema.ts`）

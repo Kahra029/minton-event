@@ -4,7 +4,6 @@
  * DI ライブラリは使わない。依存はすべてここで引数として渡す。
  */
 import type { Bindings } from './application/env';
-import { log } from './application/logger';
 import { nowUtcIso } from './datasource/clock';
 import { webCryptoTokens } from './datasource/crypto';
 import { createAttendanceRepository } from './datasource/d1/attendance';
@@ -15,14 +14,15 @@ import { createMemberRepository } from './datasource/d1/members';
 import { createSessionRepository } from './datasource/d1/sessions';
 import { getDb } from './datasource/db/client';
 import { newId } from './datasource/id';
-import { getMailSender } from './datasource/mail';
 import { pbkdf2Password } from './datasource/password';
+import { createWorkersRateLimiter } from './datasource/rateLimit';
 import type { Usecases } from './usecase';
 import { createAttendanceUsecase } from './usecase/attendance';
 import { createAuthUsecase } from './usecase/auth';
 import { createEventUsecase } from './usecase/events';
 import { createInvitationUsecase } from './usecase/invitations';
 import { createMemberUsecase } from './usecase/members';
+import { createRateLimitUsecase } from './usecase/rateLimit';
 import type { RequestLogger } from './usecase/ports';
 
 /** APP_BASE_URL（末尾の / は除く）。未設定なら null */
@@ -44,9 +44,9 @@ export function composeUsecases(env: Bindings, requestLog: RequestLogger): Useca
       ...common,
       invitations: createInvitationRepository(db),
       sessions,
-      mail: getMailSender(env, log),
       appBaseUrl: appBaseUrl(env),
     }),
     members: createMemberUsecase({ ...common, members: createMemberRepository(db) }),
+    rateLimit: createRateLimitUsecase({ limiter: createWorkersRateLimiter(env.AUTH_RATE_LIMITER) }),
   };
 }

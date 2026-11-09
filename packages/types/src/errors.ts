@@ -9,6 +9,7 @@ export const errorCodeSchema = z.enum([
   'FORBIDDEN',
   'NOT_FOUND',
   'CONFLICT',
+  'TOO_MANY_REQUESTS',
   'INTERNAL_ERROR',
 ]);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
@@ -19,6 +20,7 @@ export const ERROR_STATUS = {
   FORBIDDEN: 403,
   NOT_FOUND: 404,
   CONFLICT: 409,
+  TOO_MANY_REQUESTS: 429,
   INTERNAL_ERROR: 500,
 } as const satisfies Record<ErrorCode, number>;
 

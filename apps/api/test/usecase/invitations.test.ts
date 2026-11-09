@@ -43,59 +43,53 @@ function setup(options: { invitations?: InvitationRecord[]; memberEmails?: strin
   const memberEmails = new Set(options.memberEmails ?? []);
   const repo: InvitationRepository = {
     memberExistsByEmail: async (circleId, email) => circleId === CIRCLE_A && memberEmails.has(email),
-    findCircle: async (circleId) => (circleId === CIRCLE_A ? circleA : undefined),
     createRevokingPending: vi.fn(async (inv) => void stored.push(inv)),
     findByTokenHash: async (tokenHash) => {
       const inv = stored.find((i) => i.tokenHash === tokenHash);
       return inv ? { invitation: inv, circle: circleA } : null;
     },
     accept: vi.fn(async () => 'accepted' as const),
-    revoke: vi.fn(async () => {}),
   };
   const sessions = fakeSessions();
   const { log, context, errors } = fakeLog();
-  const mail = vi.fn(async () => {});
   const usecase = createInvitationUsecase({
     invitations: repo,
     sessions: sessions.repo,
     tokens: fakeTokens,
     password: fakePassword,
-    mail,
     appBaseUrl: 'https://app.example.test',
     now: () => NOW,
     newId: fakeIds(),
     log,
     ...options.deps,
   });
-  return { usecase, repo, stored, sessions, mail, context, errors };
+  return { usecase, repo, stored, sessions, context, errors };
 }
 
 describe('invitations usecase: 作成', () => {
-  it('member は招待できない（403、作成もメール送信もしない）', async () => {
-    const { usecase, repo, mail } = setup();
+  it('member は招待できない（403、作成しない）', async () => {
+    const { usecase, repo } = setup();
     await expectAppError(usecase.create(memberOf(CIRCLE_A), 'new@example.com'), 'FORBIDDEN');
     expect(repo.createRevokingPending).not.toHaveBeenCalled();
-    expect(mail).not.toHaveBeenCalled();
   });
 
-  it('admin は招待できる。Token はハッシュだけ保存し、平文は招待 URL にだけ載せる', async () => {
-    const { usecase, stored, mail, context } = setup();
+  it('admin は招待できる。Token はハッシュだけ保存し、平文は戻り値の招待 URL にだけ載せる（C31）', async () => {
+    const { usecase, stored, context, errors } = setup();
     const created = await usecase.create(adminOf(CIRCLE_A), 'new@example.com');
     expect(created).toEqual({
-      id: 'id-1',
-      email: 'new@example.com',
-      status: 'pending',
-      expiresAt: addMs(NOW, 7 * DAY_MS),
-      createdAt: NOW,
-    });
-    expect(stored[0]).toMatchObject({ circleId: CIRCLE_A, tokenHash: 'hash:generated-token', status: 'pending' });
-    expect(mail).toHaveBeenCalledWith({
-      invitationId: 'id-1',
-      to: 'new@example.com',
-      circleName: 'サークルA',
+      invitation: {
+        id: 'id-1',
+        email: 'new@example.com',
+        status: 'pending',
+        expiresAt: addMs(NOW, 7 * DAY_MS),
+        createdAt: NOW,
+      },
       invitationUrl: 'https://app.example.test/invitations/generated-token',
     });
+    expect(stored[0]).toMatchObject({ circleId: CIRCLE_A, tokenHash: 'hash:generated-token', status: 'pending' });
+    // ログには Token / URL を渡さない
     expect(context).toEqual({ invitationId: 'id-1' });
+    expect(errors).toEqual([]);
   });
 
   it('同じ Email の Member がいれば 409（B5）', async () => {
@@ -109,20 +103,6 @@ describe('invitations usecase: 作成', () => {
     await expectAppError(usecase.create(adminOf(CIRCLE_A), 'new@example.com'), 'INTERNAL_ERROR');
     expect(repo.createRevokingPending).not.toHaveBeenCalled();
     expect(errors.map((e) => e.message)).toEqual(['app_base_url_not_configured']);
-  });
-
-  it('メール送信に失敗したら招待を revoked にして 500', async () => {
-    const { usecase, repo, errors } = setup({
-      deps: { mail: vi.fn(async () => Promise.reject(new Error('Resend responded 500'))) },
-    });
-    await expectAppError(usecase.create(adminOf(CIRCLE_A), 'new@example.com'), 'INTERNAL_ERROR');
-    expect(repo.revoke).toHaveBeenCalledWith(CIRCLE_A, 'id-1');
-    expect(errors).toEqual([
-      {
-        message: 'invitation_mail_failed',
-        fields: { circleId: CIRCLE_A, invitationId: 'id-1', errorName: 'Error', errorMessage: 'Resend responded 500' },
-      },
-    ]);
   });
 });
 

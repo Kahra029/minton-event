@@ -36,11 +36,16 @@ describe('メンバー一覧（AC-13）', () => {
     expect(within(invitations).getByText('期限切れ')).toBeInTheDocument();
   });
 
-  it('招待フォームから送信すると POST して一覧を再取得する', async () => {
+  const INVITATION_URL = 'http://localhost:5173/invitations/secret-token';
+
+  it('招待フォームから送信すると POST して一覧を再取得し、招待 URL とコピーボタンを表示する（C31）', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
       if (init?.method === 'POST') {
         return json(201, {
           invitation: { id: 'i3', email: 'hanako@example.com', status: 'pending', expiresAt: '2026-11-14T00:00:00.000Z', createdAt: '2026-11-07T00:00:00.000Z' },
+          invitationUrl: INVITATION_URL,
         });
       }
       expect(path).toBe('/api/members');
@@ -53,11 +58,17 @@ describe('メンバー一覧（AC-13）', () => {
     fireEvent.change(screen.getByLabelText('招待するメールアドレス'), { target: { value: 'hanako@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: '招待する' }));
 
-    expect(await screen.findByText('hanako@example.com に招待メールを送信しました')).toBeInTheDocument();
+    expect(await screen.findByText('hanako@example.com の招待URLを作成しました')).toBeInTheDocument();
+    expect(screen.getByLabelText('招待URL')).toHaveValue(INVITATION_URL);
+    expect(screen.getByText('この URL は再表示できません。コピーして本人に渡してください')).toBeInTheDocument();
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!;
     expect(post[0]).toBe('/api/invitations');
     expect(JSON.parse(post[1]!.body as string)).toEqual({ email: 'hanako@example.com' });
     await waitFor(() => expect(fetchMock.mock.calls.filter(([p]) => p === '/api/members')).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole('button', { name: 'コピー' }));
+    expect(await screen.findByRole('button', { name: 'コピーしました' })).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith(INVITATION_URL);
   });
 
   it('既存 Member の Email なら API のエラー（409）を表示する', async () => {

@@ -1,5 +1,8 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 import {
+  expect,
+  randomIpHeaders,
+  test,
   BASE_URL,
   createEventViaApi,
   createMemberViaInvitation,
@@ -97,7 +100,7 @@ test('不参加を登録でき、他の Member からも確認できる（AC-08 
   await expectCounts(page, { attending: 0, absent: 1, unanswered: 1 });
 
   // admin（別の Member）から見える
-  const adminContext = await browser.newContext({ baseURL: BASE_URL });
+  const adminContext = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: randomIpHeaders() });
   const adminPage = await adminContext.newPage();
   await loginViaUi(adminPage, circle.admin);
   await openEvent(adminPage, title);

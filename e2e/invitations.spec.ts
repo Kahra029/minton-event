@@ -1,19 +1,20 @@
-import { expect, test } from '@playwright/test';
 import {
   BASE_URL,
+  expect,
   expectNoHorizontalScroll,
   invitationPath,
   loginViaUi,
   newPassword,
-  readInvitationUrl,
+  randomIpHeaders,
   seedCircle,
+  test,
   uniqueSuffix,
   type SeededCircle,
 } from './support/helpers';
 
 /**
  * Member 招待（guardrails §11）。AC-13 / AC-15 / AC-20。
- * admin がメンバー一覧から招待 → 招待 URL（dev ログ: decisions C7）で初回登録 → イベント一覧（C9）。
+ * admin がメンバー一覧から招待 → 画面に表示された招待 URL（decisions C31）で初回登録 → イベント一覧（C9）。
  */
 let circle: SeededCircle;
 
@@ -33,24 +34,23 @@ test('admin が招待し、招待 URL から初回登録するとイベント一
   await expect(page.getByRole('heading', { name: 'メンバー一覧' })).toBeVisible();
   await expectNoHorizontalScroll(page, 'メンバー一覧');
 
-  const created = page.waitForResponse(
-    (res) => res.url().endsWith('/api/invitations') && res.request().method() === 'POST',
-  );
   await page.getByLabel('招待するメールアドレス').fill(email);
   await page.getByRole('button', { name: '招待する' }).click();
-  const createdRes = await created;
-  expect(createdRes.status()).toBe(201);
-  const { invitation } = await createdRes.json();
 
-  await expect(page.getByRole('status')).toHaveText(`${email} に招待メールを送信しました`);
+  // 招待 URL とコピーボタンが表示される（C31）
+  await expect(page.getByRole('status')).toHaveText(`${email} の招待URLを作成しました`);
+  await expect(page.getByText('この URL は再表示できません。コピーして本人に渡してください')).toBeVisible();
+  const invitationUrl = await page.getByLabel('招待URL').inputValue();
+  expect(invitationUrl).toMatch(/\/invitations\/[^/]+$/);
+  await expect(page.getByRole('button', { name: 'コピー' })).toBeVisible();
   // 招待状態を確認できる
   const pending = page.getByRole('list', { name: '招待中の一覧' }).getByRole('listitem').filter({ hasText: email });
   await expect(pending).toContainText('招待中');
   await expectNoHorizontalScroll(page, 'メンバー一覧（招待後）');
 
-  // 招待された人: 招待 URL を開いて初回登録する（未ログインの別ブラウザ）
-  const path = invitationPath(await readInvitationUrl(invitation.id));
-  const inviteeContext = await browser.newContext({ baseURL: BASE_URL });
+  // 招待された人: 画面に表示された招待 URL を開いて初回登録する（未ログインの別ブラウザ）
+  const path = invitationPath(invitationUrl);
+  const inviteeContext = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: randomIpHeaders() });
   const invitee = await inviteeContext.newPage();
   await invitee.goto(path);
   await expect(invitee.getByRole('heading', { name: '初回登録' })).toBeVisible();
@@ -84,7 +84,7 @@ test('admin が招待し、招待 URL から初回登録するとイベント一
   await expect(page.getByRole('list', { name: '招待中の一覧' }).getByText(email)).toHaveCount(0);
 
   // 登録した Email / Password でログインできる（AC-01）
-  const loginContext = await browser.newContext({ baseURL: BASE_URL });
+  const loginContext = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: randomIpHeaders() });
   const loginPage = await loginContext.newPage();
   await loginViaUi(loginPage, { circleLoginId: circle.circleLoginId, email, password, displayName });
   await loginContext.close();

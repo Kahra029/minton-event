@@ -6,14 +6,22 @@
 - `apps/web` — Vite + React + Tailwind + shadcn/ui
 - `packages/types` — zod スキーマ / API 型（api と web で共有）
 
-構成・規約・ローカル起動手順は [docs/architecture.md](docs/architecture.md)、決定事項は [docs/decisions.md](docs/decisions.md)。
+本番は Worker 1 つ（`minton-event-api`）で Web（`apps/web` のビルド成果物を静的アセットとして配信）と API（`/api/*`）を配信し、
+`https://minton-event-api.<account>.workers.dev` で公開する（独自ドメインなし。decisions C30）。
+招待はメールを送らず、招待作成の直後に admin の画面に出る招待 URL をコピーして本人に渡す（C31）。
+
+構成・規約・ローカル起動手順は [docs/architecture.md](docs/architecture.md)、デプロイ手順は [docs/deploy.md](docs/deploy.md)、
+決定事項は [docs/decisions.md](docs/decisions.md)。
 
 ```sh
 npm install
-cp apps/api/.dev.vars.example apps/api/.dev.vars   # DEV_MAIL_LOG=1: 招待メールを送らず招待 URL をログに出す（開発用のみ。decisions C23）
+cp apps/api/.dev.vars.example apps/api/.dev.vars   # APP_BASE_URL（招待 URL の基準）
 npm run db:migrate:local
-npm run dev
+npm run dev                                          # web: http://localhost:5173（/api は wrangler dev に proxy）
 npm run typecheck && npm run lint && npm test
+npm run test:e2e                                     # Playwright（初回は npx playwright install chromium webkit）
+npm run build                                        # web をビルド（apps/web/dist）
+# npm run deploy                                     # build してから wrangler deploy（手順は docs/deploy.md）
 ```
 
 ## 初期 Circle / admin の作成（seed CLI）
@@ -34,7 +42,7 @@ node scripts/seed.ts --circle-login-id <circleLoginId> --circle-name <サーク�
 
 ### remote（Cloudflare 上の D1）
 
-remote の D1 作成・`wrangler.jsonc` の `database_id` 設定・`wrangler d1 migrations apply DB --remote` を済ませ、`wrangler login` した状態で `--remote` を付ける。
+remote の Migration 適用（`wrangler d1 migrations apply DB --remote`）を済ませ、`wrangler login` した状態で `--remote` を付ける（[docs/deploy.md](docs/deploy.md)）。
 
 ```sh
 cd apps/api

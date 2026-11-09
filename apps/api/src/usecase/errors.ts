@@ -6,6 +6,7 @@ export const DEFAULT_ERROR_MESSAGES: Record<ErrorCode, string> = {
   FORBIDDEN: 'この操作を行う権限がありません',
   NOT_FOUND: '見つかりません',
   CONFLICT: '既に登録されています',
+  TOO_MANY_REQUESTS: '試行回数が多すぎます。しばらくしてから再度お試しください',
   INTERNAL_ERROR: 'サーバーでエラーが発生しました',
 };
 
@@ -33,4 +34,5 @@ export const unauthorized = (message?: string) => new AppError('UNAUTHORIZED', m
 export const forbidden = (message?: string) => new AppError('FORBIDDEN', message);
 export const notFound = (message?: string) => new AppError('NOT_FOUND', message);
 export const conflict = (message?: string) => new AppError('CONFLICT', message);
+export const tooManyRequests = () => new AppError('TOO_MANY_REQUESTS');
 export const internalError = () => new AppError('INTERNAL_ERROR');

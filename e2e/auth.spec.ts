@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/helpers';
 
 /**
  * Login / Logout（AC-01, AC-20 の Login 部分）。

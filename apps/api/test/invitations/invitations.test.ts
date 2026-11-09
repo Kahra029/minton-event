@@ -14,7 +14,9 @@ import {
   errorCode,
   request,
   sessionFromSetCookie,
+  sendUntilLimited,
   setupCircle,
+  uniqueIp,
   verifySessionToken,
 } from '../helpers';
 
@@ -29,23 +31,11 @@ function captureLogs() {
   return lines;
 }
 
-const parseLines = (lines: string[]) => lines.map((l) => JSON.parse(l) as Record<string, unknown>);
-
-/** dev 経路のメールログから招待 URL を取り出す */
-function invitationUrlFromLogs(lines: string[]): string {
-  const entry = parseLines(lines).find((e) => e.message === 'invitation_mail_dev');
-  expect(entry).toBeDefined();
-  return entry!.invitationUrl as string;
-}
-
 const tokenFromUrl = (url: string) => decodeURIComponent(new URL(url).pathname.split('/').pop()!);
 
 const APP_BASE_URL = 'https://app.example.test';
 
-/**
- * 招待作成。env は wrangler.jsonc の vars（空）に APP_BASE_URL などを上書きして渡す。
- * 既定は dev のメールログ（DEV_MAIL_LOG=1: C23）。実送信や未設定を試すときは DEV_MAIL_LOG: undefined で上書きする
- */
+/** 招待作成。env は wrangler.jsonc の vars（空）に APP_BASE_URL を上書きして渡す */
 const invite = (
   cookie: string,
   email: string,
@@ -59,11 +49,13 @@ const invite = (
       headers: { ...(cookie ? { Cookie: cookie } : {}), 'Content-Type': 'application/json', ...headers },
       body: JSON.stringify({ email }),
     },
-    { ...env, APP_BASE_URL, DEV_MAIL_LOG: '1', ...envOverrides },
+    { ...env, APP_BASE_URL, ...envOverrides },
   );
 
-const accept = (token: string, body: Record<string, unknown>) =>
-  request(`/api/invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body });
+type CreateBody = { invitation: Record<string, string>; invitationUrl: string };
+
+const accept = (token: string, body: Record<string, unknown>, ip?: string | null) =>
+  request(`/api/invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body, ip });
 
 const validAccept = { displayName: '新メンバー', password: 'newpassword1', passwordConfirmation: 'newpassword1' };
 
@@ -78,16 +70,14 @@ async function memberCount(circleId: string) {
   return (await db().select({ id: members.id }).from(members).where(eq(members.circleId, circleId))).length;
 }
 
-describe('POST /api/invitations（AC-13 / AC-14）', () => {
-  it('AC-13: admin が招待を作成でき、Circle に紐づき、Token はハッシュで保存され、dev ではメールをログに出す', async () => {
+describe('POST /api/invitations（AC-13 / AC-14 / C31）', () => {
+  it('AC-13: admin が招待を作成でき、Circle に紐づき、Token はハッシュで保存され、招待 URL はレスポンスにだけ載る', async () => {
     const { circle, admin, adminCookie } = await setupCircle();
     const lines = captureLogs();
     const res = await invite(adminCookie, '  Invitee@Example.COM ');
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { invitation: Record<string, string> };
+    const body = (await res.json()) as CreateBody;
     expect(body.invitation).toMatchObject({ email: 'invitee@example.com', status: 'pending' });
-    // レスポンスに Token / URL を含めない
-    expect(JSON.stringify(body)).not.toMatch(/token|invitations\//i);
 
     const [row] = await invitationRows(circle.id, 'invitee@example.com');
     expect(row).toMatchObject({ id: body.invitation.id, circleId: circle.id, createdBy: admin.id, status: 'pending' });
@@ -96,17 +86,30 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
     const ttl = Date.parse(row.expiresAt) - Date.parse(row.createdAt);
     expect(ttl).toBe(7 * DAY_MS);
 
-    // dev 経路でメール送信処理が呼ばれ、招待 URL が出る（C7）
-    const url = invitationUrlFromLogs(lines);
-    expect(url).toMatch(/^https:\/\/app\.example\.test\/invitations\//);
-    const token = tokenFromUrl(url);
+    // 招待 URL は APP_BASE_URL から作る（C17）
+    expect(body.invitationUrl).toMatch(/^https:\/\/app\.example\.test\/invitations\/[^/]+$/);
+    const token = tokenFromUrl(body.invitationUrl);
     expect(token.length).toBeGreaterThanOrEqual(43); // 256 bit の base64url
     expect(row.tokenHash).toBe(await hashToken(token));
     expect(row.tokenHash).not.toBe(token);
 
-    // C7 の dev メールログ以外に Token は出ない
-    const others = lines.filter((l) => !l.includes('"invitation_mail_dev"'));
-    expect(others.join('\n')).not.toContain(token);
+    // Token / 招待 URL はログに出さない
+    const all = lines.join('\n');
+    expect(all).not.toContain(token);
+    expect(all).not.toContain(body.invitationUrl);
+
+    // 招待 URL で招待情報が引ける
+    expect((await request(new URL(body.invitationUrl).pathname.replace('/invitations/', '/api/invitations/'))).status).toBe(200);
+  });
+
+  it('メンバー一覧には Token / 招待 URL を返さない（C31: 再表示できない）', async () => {
+    const { adminCookie } = await setupCircle();
+    captureLogs();
+    const { invitationUrl } = (await (await invite(adminCookie, 'list@example.com')).json()) as CreateBody;
+    const list = await (await request('/api/members', { cookie: adminCookie })).text();
+    expect(list).toContain('list@example.com');
+    expect(list).not.toContain(tokenFromUrl(invitationUrl));
+    expect(list).not.toMatch(/token|invitations\//i);
   });
 
   it('AC-14: member は 403 で、Invitation は作られない', async () => {
@@ -134,10 +137,8 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
 
   it('B4: 同じ Email に再招待すると前の pending は revoked になり、前の Token は使えない', async () => {
     const { circle, adminCookie } = await setupCircle();
-    const lines = captureLogs();
-    expect((await invite(adminCookie, 'again@example.com')).status).toBe(201);
-    const firstToken = tokenFromUrl(invitationUrlFromLogs(lines));
-    lines.length = 0;
+    const first = (await (await invite(adminCookie, 'again@example.com')).json()) as CreateBody;
+    const firstToken = tokenFromUrl(first.invitationUrl);
     expect((await invite(adminCookie, 'again@example.com')).status).toBe(201);
 
     const rows = await invitationRows(circle.id, 'again@example.com');
@@ -149,7 +150,6 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
     const a = await setupCircle();
     const b = await setupCircle();
     const { invitation } = await createInvitation({ circleId: b.circle.id, createdBy: b.admin.id, email: 'both@example.com' });
-    captureLogs();
     expect((await invite(a.adminCookie, 'both@example.com')).status).toBe(201);
     const [row] = await invitationRows(b.circle.id, 'both@example.com');
     expect(row).toMatchObject({ id: invitation.id, status: 'pending' });
@@ -167,42 +167,12 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
   it('別 Circle の Member と同じ Email なら招待できる（複数 Circle 所属は許容）', async () => {
     const a = await setupCircle();
     const b = await setupCircle();
-    captureLogs();
     const res = await invite(a.adminCookie, b.member.email);
     expect(res.status).toBe(201);
   });
 
-  it('RESEND_API_KEY 設定時は MAIL_FROM から Resend API を呼び、招待 URL・Token・API キーをログに出さない', async () => {
-    const { adminCookie } = await setupCircle();
-    const lines = captureLogs();
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify({ id: 'mail-1' }), { status: 200 }));
-    const res = await invite(adminCookie, 'prod@example.com', {
-      DEV_MAIL_LOG: undefined,
-      RESEND_API_KEY: 're_test_key',
-      MAIL_FROM: 'Minton <noreply@example.test>',
-    });
-    expect(res.status).toBe(201);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://api.resend.com/emails');
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer re_test_key');
-    const payload = JSON.parse(init.body as string) as { from: string; to: string[]; text: string };
-    expect(payload.from).toBe('Minton <noreply@example.test>');
-    expect(payload.to).toEqual(['prod@example.com']);
-    const mailUrl = payload.text.match(/https:\/\/app\.example\.test\/invitations\/\S+/)![0];
-    const token = tokenFromUrl(mailUrl);
-
-    const all = lines.join('\n');
-    expect(all).not.toContain('invitation_mail_dev');
-    expect(all).not.toContain(token);
-    expect(all).not.toContain('re_test_key');
-  });
-
   it('招待 URL は APP_BASE_URL から作り、Host / Origin ヘッダーは使わない（末尾の / は除く）', async () => {
     const { adminCookie } = await setupCircle();
-    const lines = captureLogs();
     const res = await invite(
       adminCookie,
       'host@example.com',
@@ -210,7 +180,7 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
       { Host: 'evil.example', 'X-Forwarded-Host': 'evil.example' },
     );
     expect(res.status).toBe(201);
-    expect(invitationUrlFromLogs(lines)).toMatch(/^https:\/\/app\.example\.test\/invitations\/[^/]+$/);
+    expect(((await res.json()) as CreateBody).invitationUrl).toMatch(/^https:\/\/app\.example\.test\/invitations\/[^/]+$/);
   });
 
   it('APP_BASE_URL 未設定なら 500 で、Invitation は作らない', async () => {
@@ -222,109 +192,6 @@ describe('POST /api/invitations（AC-13 / AC-14）', () => {
     expect(await invitationRows(circle.id, 'nobase@example.com')).toHaveLength(0);
     expect(lines.some((l) => l.includes('app_base_url_not_configured'))).toBe(true);
   });
-
-  it.each([
-    ['Resend がエラーを返す', { MAIL_FROM: 'noreply@example.test' }, 500],
-    ['MAIL_FROM が未設定', { MAIL_FROM: '' }, null],
-  ])('送信失敗（%s）なら Invitation を revoked にして 500。Token はログに出さない', async (_label, overrides, resendStatus) => {
-    const { circle, adminCookie } = await setupCircle();
-    const lines = captureLogs();
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response('{"message":"error"}', { status: resendStatus ?? 200 }));
-    const res = await invite(adminCookie, 'fail@example.com', {
-      DEV_MAIL_LOG: undefined,
-      RESEND_API_KEY: 're_test_key',
-      ...overrides,
-    });
-    expect(res.status).toBe(500);
-    const json = (await res.json()) as ApiErrorResponse;
-    expect(json.error).toEqual({ code: 'INTERNAL_ERROR', message: expect.any(String) });
-    expect(fetchSpy).toHaveBeenCalledTimes(resendStatus ? 1 : 0);
-
-    const rows = await invitationRows(circle.id, 'fail@example.com');
-    expect(rows.map((r) => r.status)).toEqual(['revoked']);
-    // 一覧にも出ない（C6）
-    const list = (await (await request('/api/members', { cookie: adminCookie })).json()) as {
-      invitations: { email: string }[];
-    };
-    expect(list.invitations.map((i) => i.email)).not.toContain('fail@example.com');
-
-    const failed = parseLines(lines).find((e) => e.message === 'invitation_mail_failed');
-    expect(failed).toMatchObject({ level: 'error', circleId: circle.id, invitationId: rows[0].id });
-    expect(lines.join('\n')).not.toMatch(/invitations\/[A-Za-z0-9_-]{20,}/);
-    expect(lines.join('\n')).not.toContain('re_test_key');
-  });
-});
-
-describe('C23: 招待メールの送信手段は DEV_MAIL_LOG フラグで明示的に判定する', () => {
-  /** fetch を止め、Resend が呼ばれたかを見る */
-  const stubFetch = () =>
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ id: 'mail-1' }), { status: 200 }));
-
-  it('C23: DEV_MAIL_LOG=1 なら実送信せず招待 URL をログに出す（RESEND_API_KEY があってもフラグを優先）', async () => {
-    const { circle, adminCookie } = await setupCircle();
-    const lines = captureLogs();
-    const fetchSpy = stubFetch();
-    const res = await invite(adminCookie, 'devflag@example.com', {
-      DEV_MAIL_LOG: '1',
-      RESEND_API_KEY: 're_test_key',
-      MAIL_FROM: 'noreply@example.test',
-    });
-    expect(res.status).toBe(201);
-    expect(fetchSpy).not.toHaveBeenCalled();
-    const [row] = await invitationRows(circle.id, 'devflag@example.com');
-    expect(row.status).toBe('pending');
-    const token = tokenFromUrl(invitationUrlFromLogs(lines));
-    expect(row.tokenHash).toBe(await hashToken(token));
-  });
-
-  it('C23: フラグなし・RESEND_API_KEY ありなら Resend に送信し、dev ログは出さない', async () => {
-    const { circle, adminCookie } = await setupCircle();
-    const lines = captureLogs();
-    const fetchSpy = stubFetch();
-    const res = await invite(adminCookie, 'resend@example.com', {
-      DEV_MAIL_LOG: undefined,
-      RESEND_API_KEY: 're_test_key',
-      MAIL_FROM: 'noreply@example.test',
-    });
-    expect(res.status).toBe(201);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.resend.com/emails');
-    const [row] = await invitationRows(circle.id, 'resend@example.com');
-    expect(row.status).toBe('pending');
-    expect(lines.join('\n')).not.toContain('invitation_mail_dev');
-  });
-
-  it.each([
-    ['未設定', undefined],
-    ['"1" 以外', 'true'],
-  ])(
-    'C23: フラグ%s・RESEND_API_KEY なしなら送信エラーで、Invitation を revoked にして 500（C16）。Token はログに出さない',
-    async (_label, flag) => {
-      const { circle, adminCookie } = await setupCircle();
-      const lines = captureLogs();
-      const fetchSpy = stubFetch();
-      const res = await invite(adminCookie, 'nomail@example.com', {
-        DEV_MAIL_LOG: flag,
-        RESEND_API_KEY: undefined,
-        MAIL_FROM: 'noreply@example.test',
-      });
-      expect(res.status).toBe(500);
-      const json = (await res.json()) as ApiErrorResponse;
-      expect(json.error).toEqual({ code: 'INTERNAL_ERROR', message: expect.any(String) });
-      expect(fetchSpy).not.toHaveBeenCalled();
-
-      const rows = await invitationRows(circle.id, 'nomail@example.com');
-      expect(rows.map((r) => r.status)).toEqual(['revoked']);
-      const failed = parseLines(lines).find((e) => e.message === 'invitation_mail_failed');
-      expect(failed).toMatchObject({ level: 'error', circleId: circle.id, invitationId: rows[0].id });
-
-      const all = lines.join('\n');
-      expect(all).not.toContain('invitation_mail_dev');
-      expect(all).not.toMatch(/invitations\/[A-Za-z0-9_-]{20,}/);
-    },
-  );
 });
 
 describe('GET /api/invitations/:token', () => {
@@ -354,11 +221,12 @@ describe('GET /api/invitations/:token', () => {
 });
 
 describe('POST /api/invitations/:token/accept（AC-15 / AC-16 / AC-17）', () => {
-  it('AC-13〜15: admin の招待 → メールの URL から登録 → Member 作成・Circle 所属・accepted・ログイン状態・一覧で確認', async () => {
+  it('AC-13〜15: admin の招待 → 表示された URL から登録 → Member 作成・Circle 所属・accepted・ログイン状態・一覧で確認', async () => {
     const { circle, adminCookie } = await setupCircle();
     const lines = captureLogs();
-    expect((await invite(adminCookie, 'flow@example.com')).status).toBe(201);
-    const token = tokenFromUrl(invitationUrlFromLogs(lines));
+    const createdRes = await invite(adminCookie, 'flow@example.com');
+    expect(createdRes.status).toBe(201);
+    const token = tokenFromUrl(((await createdRes.json()) as CreateBody).invitationUrl);
 
     // 登録前: メンバー一覧に招待状態が出る
     const before = (await (await request('/api/members', { cookie: adminCookie })).json()) as {
@@ -500,5 +368,55 @@ describe('POST /api/invitations/:token/accept（AC-15 / AC-16 / AC-17）', () =>
     const { token } = await createInvitation({ circleId: circle.id, createdBy: admin.id });
     const res = await accept(token, { ...validAccept, displayName: '  たろう  ' });
     expect(((await res.json()) as MeResponse).member.displayName).toBe('たろう');
+  });
+});
+
+describe('試行回数制限（C33 / C34）', () => {
+  /** 存在しない Token で上限まで受け入れを試す（すべて 404 → 429） */
+  const exhaust = (ip: string) =>
+    sendUntilLimited(
+      () => accept('no-such-token', validAccept, ip),
+      (r) => expect(r.status).toBe(404),
+    );
+
+  it('同じ IP から 60 秒に 10 回を超えると受け入れは 429 TOO_MANY_REQUESTS（Token の検証より前に数える）', async () => {
+    const { circle, admin } = await setupCircle();
+    const { token } = await createInvitation({ circleId: circle.id, createdBy: admin.id });
+    const count = await memberCount(circle.id);
+
+    const sameIp = uniqueIp();
+    const res = await exhaust(sameIp);
+    expect(((await res.json()) as ApiErrorResponse).error).toEqual({
+      code: 'TOO_MANY_REQUESTS',
+      message: '試行回数が多すぎます。しばらくしてから再度お試しください',
+    });
+
+    // 有効な Token・入力でも制限される（Member は作られない）
+    expect((await accept(token, validAccept, sameIp)).status).toBe(429);
+    expect(await memberCount(circle.id)).toBe(count);
+
+    // 別の IP は制限されない
+    expect((await accept(token, validAccept, uniqueIp())).status).toBe(201);
+  });
+
+  it('login と招待の受け入れは別々に数える', async () => {
+    const sameIp = uniqueIp();
+    await exhaust(sameIp);
+    const login = await request('/api/auth/login', {
+      method: 'POST',
+      body: { circleLoginId: 'no-such-circle', email: 'a@example.com', password: 'password1234' },
+      ip: sameIp,
+    });
+    expect(login.status).toBe(404);
+  });
+
+  it('招待情報の取得（GET）と招待の作成は制限しない', async () => {
+    const { circle, admin, adminCookie } = await setupCircle();
+    const { token } = await createInvitation({ circleId: circle.id, createdBy: admin.id });
+    const sameIp = uniqueIp();
+    await exhaust(sameIp);
+    expect((await request(`/api/invitations/${token}`, { ip: sameIp })).status).toBe(200);
+    const created = await invite(adminCookie, 'after-limit@example.com', {}, { 'CF-Connecting-IP': sameIp });
+    expect(created.status).toBe(201);
   });
 });

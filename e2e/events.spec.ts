@@ -1,5 +1,8 @@
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test';
 import {
+  expect,
+  randomIpHeaders,
+  test,
   BASE_URL,
   createEventViaApi,
   createMemberViaInvitation,
@@ -122,14 +125,14 @@ test('admin が Event を作成すると詳細へ遷移し、member からも見
   await expect(page.getByRole('link', { name: new RegExp(title) })).toBeVisible();
 
   // 同一 Circle の member から閲覧できる
-  const memberContext = await browser.newContext({ baseURL: BASE_URL });
+  const memberContext = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: randomIpHeaders() });
   const memberPage = await memberContext.newPage();
   await loginViaUi(memberPage, member);
   await expect(memberPage.getByRole('link', { name: new RegExp(title) })).toBeVisible();
   await memberContext.close();
 
   // 別 Circle からは閲覧できない（見つかりません）
-  const otherContext = await browser.newContext({ baseURL: BASE_URL });
+  const otherContext = await browser.newContext({ baseURL: BASE_URL, extraHTTPHeaders: randomIpHeaders() });
   const otherPage = await otherContext.newPage();
   await loginViaUi(otherPage, other.admin);
   await expect(otherPage.getByRole('link', { name: new RegExp(title) })).toHaveCount(0);

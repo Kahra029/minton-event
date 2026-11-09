@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/helpers';
 
 /**
  * 雛形。各機能の E2E（Login / Event 確認 / 出欠登録・変更 / admin の Event 作成 / Member 招待）は

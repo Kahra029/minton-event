@@ -1,7 +1,7 @@
 /**
  * 招待（T4）。契約: packages/types/src/invitations.ts
  * - 作成（admin のみ）: 同じ Email の Member がいれば 409（B5）、同じ Email の pending は revoked にして作り直す（B4）、
- *   招待メールを送る（A4 / C7）。送れなかった招待は revoked にして 500
+ *   招待 URL（Token を含む）を作成した admin への戻り値にだけ載せる（C31 / C32。メールは送らない。ログに出さない）
  * - Token から使える招待（pending かつ期限内: B3）を引く。使えなければ理由を区別せず 404（C11）
  * - 初回登録（AC-15〜17 / C9）: Email・Circle は Invitation から取り（AC-16）、Member 作成後に Session を発行する
  */
@@ -41,7 +41,6 @@ export type InvitationWithCircle = { invitation: InvitationRecord; circle: Invit
 export interface InvitationRepository {
   /** 同じ Circle に同じ Email の Member がいるか（B5 / C11） */
   memberExistsByEmail(circleId: string, email: string): Promise<boolean>;
-  findCircle(circleId: string): Promise<InvitationCircle | undefined>;
   /** B4: 同じ Circle・同じ Email の pending を revoked にしてから作成する（原子的に） */
   createRevokingPending(invitation: InvitationRecord): Promise<void>;
   /** Token ハッシュで Invitation とその Circle を引く（状態は問わない）。Circle を知らない状態（未ログイン）で使うため */
@@ -57,27 +56,13 @@ export interface InvitationRepository {
     passwordHash: string;
     now: string;
   }): Promise<'accepted' | 'unusable' | 'email_taken'>;
-  /** pending のときだけ revoked にする */
-  revoke(circleId: string, invitationId: string): Promise<void>;
 }
-
-export type InvitationMail = {
-  invitationId: string;
-  to: string;
-  circleName: string;
-  /** 例: https://example.com/invitations/<token> */
-  invitationUrl: string;
-};
-
-/** 招待メールの送信（Resend / 開発環境ではログ: C7） */
-export type MailSender = (mail: InvitationMail) => Promise<void>;
 
 export type InvitationDeps = {
   invitations: InvitationRepository;
   sessions: SessionRepository;
   tokens: TokenService;
   password: PasswordHasher;
-  mail: MailSender;
   /** 招待 URL の基準（APP_BASE_URL。末尾 / なし）。未設定なら null */
   appBaseUrl: string | null;
   now: Now;
@@ -106,7 +91,7 @@ export function createInvitationUsecase(deps: InvitationDeps) {
 
   return {
     /** admin のみ（AC-13 / AC-14 / B2 / B4 / B5） */
-    async create(member: AuthMember, email: string): Promise<Invitation> {
+    async create(member: AuthMember, email: string): Promise<{ invitation: Invitation; invitationUrl: string }> {
       assertAdmin(member);
       if (await deps.invitations.memberExistsByEmail(member.circleId, email)) throw conflict(MEMBER_EXISTS_MESSAGE);
 
@@ -116,9 +101,6 @@ export function createInvitationUsecase(deps: InvitationDeps) {
         deps.log.error('app_base_url_not_configured');
         throw internalError();
       }
-
-      const circle = await deps.invitations.findCircle(member.circleId);
-      if (!circle) throw notFound();
 
       const token = deps.tokens.generate();
       const now = deps.now();
@@ -136,31 +118,16 @@ export function createInvitationUsecase(deps: InvitationDeps) {
       await deps.invitations.createRevokingPending(invitation);
       deps.log.addContext({ invitationId: invitation.id });
 
-      try {
-        await deps.mail({
-          invitationId: invitation.id,
-          to: email,
-          circleName: circle.name,
-          invitationUrl: buildInvitationUrl(baseUrl, token),
-        });
-      } catch (e) {
-        // 送信できなかった招待は使えないようにしてから 500（C16）
-        await deps.invitations.revoke(member.circleId, invitation.id);
-        deps.log.error('invitation_mail_failed', {
-          circleId: member.circleId,
-          invitationId: invitation.id,
-          errorName: e instanceof Error ? e.name : 'Unknown',
-          errorMessage: e instanceof Error ? e.message : undefined,
-        });
-        throw internalError();
-      }
-
+      // 平文の Token が載るのはこの戻り値（作成した admin へのレスポンス）だけ。ログには出さない
       return {
-        id: invitation.id,
-        email: invitation.email,
-        status: 'pending',
-        expiresAt: invitation.expiresAt,
-        createdAt: invitation.createdAt,
+        invitation: {
+          id: invitation.id,
+          email: invitation.email,
+          status: 'pending',
+          expiresAt: invitation.expiresAt,
+          createdAt: invitation.createdAt,
+        },
+        invitationUrl: buildInvitationUrl(baseUrl, token),
       };
     },
 

@@ -4,6 +4,7 @@ import type { AuthUsecase } from './auth';
 import type { EventUsecase } from './events';
 import type { InvitationUsecase } from './invitations';
 import type { MemberUsecase } from './members';
+import type { RateLimitUsecase } from './rateLimit';
 
 export type Usecases = {
   auth: AuthUsecase;
@@ -11,4 +12,5 @@ export type Usecases = {
   attendance: AttendanceUsecase;
   invitations: InvitationUsecase;
   members: MemberUsecase;
+  rateLimit: RateLimitUsecase;
 };

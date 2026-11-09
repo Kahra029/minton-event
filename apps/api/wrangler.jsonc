@@ -3,21 +3,35 @@
   "name": "minton-event-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-06-15",
+  // Worker 1 つで Web（静的アセット）と API（/api/*）を配信する（decisions C30）。
+  // web のビルド成果物（npm run build で apps/web/dist に出力）を配信し、/api/* だけ Worker を先に通す。
+  // それ以外で該当ファイルが無いパスは index.html を返す（SPA のフォールバック）
+  "assets": {
+    "directory": "../web/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "minton-event",
-      // remote の D1（2026-11-07 作成、APAC）。Migration の remote 適用・デプロイはユーザーが行う
+      // remote の D1（2026-11-07 作成、APAC）。Migration の remote 適用・デプロイはユーザーが行う（docs/deploy.md）
       "database_id": "ed8ab48a-beea-4cfd-b7d4-8693484d2eaf",
       "migrations_dir": "migrations"
     }
   ],
+  // 試行回数制限（decisions C33 / C34）。POST /api/auth/login と招待の受け入れに IP 単位で使う（key は login:<IP> / accept:<IP>）
+  "ratelimits": [
+    {
+      "name": "AUTH_RATE_LIMITER",
+      // アカウント内で一意な任意の数値
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
   // 本番の値はデプロイ時にユーザーが入れる。ローカルは .dev.vars で上書きする（.dev.vars.example 参照）
   "vars": {
-    // 招待メールの送信元アドレス（Resend）。RESEND_API_KEY 設定時に未設定なら送信エラー（T4）
-    // 開発用の DEV_MAIL_LOG（招待 URL のログ出力: C23）はここには置かない。.dev.vars にだけ置く
-    "MAIL_FROM": "",
-    // 招待 URL の基準（web のオリジン。例: https://example.com）。未設定なら招待作成はエラー（T4）
+    // 招待 URL の基準（C17 / C30。この Worker の URL: https://minton-event-api.<account>.workers.dev）。未設定なら招待作成はエラー
     "APP_BASE_URL": ""
   },
   "observability": {

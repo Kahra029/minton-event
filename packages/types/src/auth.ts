@@ -6,6 +6,7 @@ import { emailSchema, idSchema, roleSchema } from './common';
  * - circleLoginId が存在しない: 404 NOT_FOUND（decisions B12）
  * - Email / Password 不一致: 401 UNAUTHORIZED「メールアドレスまたはパスワードが違います」
  * - 成功: 200 MeResponse + Session Cookie を発行
+ * - IP 単位の試行回数制限あり（C33 / C34）。超えたら 429 TOO_MANY_REQUESTS（入力の検証より前に判定）
  */
 export const loginRequestSchema = z.object({
   circleLoginId: z.string().trim().min(1).max(64),

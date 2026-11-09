@@ -168,12 +168,27 @@ export async function setupCircle(overrides: Partial<typeof circles.$inferInsert
   };
 }
 
-/** API へのリクエスト。body はオブジェクトなら JSON にする */
+/**
+ * テスト用のランダムな IP（10.0.0.0/8）。試行回数制限（C33）の key をテストごとに分けるため。
+ * テストファイルをまたいでも重ならないよう、連番ではなく乱数にする
+ */
+export function uniqueIp(): string {
+  const [a, b, c] = crypto.getRandomValues(new Uint8Array(3));
+  return `10.${a}.${b}.${c}`;
+}
+
+/**
+ * API へのリクエスト。body はオブジェクトなら JSON にする。
+ * CF-Connecting-IP は既定でリクエストごとに一意な値を付ける（試行回数制限: C33 / C34 に当たらないように）。
+ * ip で固定でき、null なら付けない
+ */
 export async function request(
   path: string,
-  init: { method?: string; body?: unknown; cookie?: string; headers?: Record<string, string> } = {},
+  init: { method?: string; body?: unknown; cookie?: string; headers?: Record<string, string>; ip?: string | null } = {},
 ): Promise<Response> {
   const headers: Record<string, string> = { ...init.headers };
+  const ip = init.ip === undefined ? uniqueIp() : init.ip;
+  if (ip !== null) headers['CF-Connecting-IP'] = ip;
   if (init.cookie) headers.Cookie = init.cookie;
   let body: BodyInit | undefined;
   if (init.body !== undefined) {
@@ -181,6 +196,24 @@ export async function request(
     body = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
   }
   return app.request(`http://localhost${path}`, { method: init.method ?? 'GET', headers, body }, env);
+}
+
+/**
+ * 試行回数制限（C33）の上限に達するまで送る。最後のレスポンス（429 のはず）を返す。
+ * ローカルの制限は 60 秒の窓が時計に揃っていて、途中で窓が切り替わると数え直しになるため、
+ * 「11 回目ちょうど」ではなく「10 回は通り、その後 21 回目までに 429 になる」ことを確かめる。
+ * 各リクエストのステータスは expectAllowed で検査する
+ */
+export async function sendUntilLimited(
+  send: () => Promise<Response>,
+  expectAllowed: (res: Response) => void,
+): Promise<Response> {
+  for (let i = 1; i <= 21; i++) {
+    const res = await send();
+    if (res.status === 429 && i > 10) return res;
+    expectAllowed(res);
+  }
+  throw new Error('21 回送っても 429 になりませんでした');
 }
 
 /** エラーレスポンスの code を取り出す */

@@ -16,8 +16,9 @@ export const INVITATION_TTL_DAYS = 7;
  * POST /api/invitations（admin のみ。member は 403）→ 201 CreateInvitationResponse
  * - 同じ Circle に同じ Email の Member が存在: 409 CONFLICT（B5）
  * - 同じ Email の pending Invitation があれば revoked にしてから新規作成（B4）
- * - 招待メールを送信（A4。dev は送信せずログ出力: C7）
- * レスポンスに Token / 招待 URL は含めない。
+ * - メールは送らない（C31 / C32）。レスポンスの invitationUrl（Token を含む。APP_BASE_URL から生成: C17）を
+ *   作成した admin の画面にだけ表示する。Token はハッシュだけ保存するため、あとから再取得はできない
+ * Token / 招待 URL を返すのはこのレスポンスだけ（一覧などでは返さない）。
  */
 export const createInvitationRequestSchema = z.object({
   email: emailSchema,
@@ -33,7 +34,11 @@ export const invitationSchema = z.object({
 });
 export type Invitation = z.infer<typeof invitationSchema>;
 
-export const createInvitationResponseSchema = z.object({ invitation: invitationSchema });
+export const createInvitationResponseSchema = z.object({
+  invitation: invitationSchema,
+  /** 例: https://minton-event-api.<account>.workers.dev/invitations/<token> */
+  invitationUrl: z.string(),
+});
 export type CreateInvitationResponse = z.infer<typeof createInvitationResponseSchema>;
 
 export const invitationTokenParamSchema = z.object({
@@ -52,6 +57,7 @@ export type InvitationInfoResponse = z.infer<typeof invitationInfoResponseSchema
 
 /**
  * POST /api/invitations/:token/accept（ログイン不要）→ 201 MeResponse + Session Cookie（C9）
+ * IP 単位の試行回数制限あり（C33 / C34）。超えたら 429 TOO_MANY_REQUESTS（Token・入力の検証より前に判定）。
  * Email は Invitation のものを使う（入力させない: AC-16）。
  * 同じ Circle + Email の Member が既に存在する場合は 409 CONFLICT。
  */

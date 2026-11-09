@@ -26,10 +26,6 @@ export function createInvitationRepository(db: DB): InvitationRepository {
       return row.length > 0;
     },
 
-    async findCircle(circleId) {
-      return db.query.circles.findFirst({ where: eq(circles.id, circleId) });
-    },
-
     /** 1 つの batch で原子的に行う */
     async createRevokingPending(invitation) {
       await db.batch([
@@ -100,15 +96,6 @@ export function createInvitationRepository(db: DB): InvitationRepository {
         if (isUniqueConstraintError(e)) return 'email_taken';
         throw e;
       }
-    },
-
-    async revoke(circleId, invitationId) {
-      await db
-        .update(invitations)
-        .set({ status: 'revoked' })
-        .where(
-          and(eq(invitations.circleId, circleId), eq(invitations.id, invitationId), eq(invitations.status, 'pending')),
-        );
     },
   };
 }

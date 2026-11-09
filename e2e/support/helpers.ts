@@ -4,18 +4,34 @@
  * - データはすべてローカル D1（apps/api/.wrangler）に作る。remote には触れない。
  *   - Circle と admin: seed CLI（apps/api/scripts/seed.ts、既定で --local）
  *   - Event: admin で API（POST /api/events）を呼ぶ
- *   - member: admin で招待 API を呼び、dev ログの招待 URL（decisions C7）から初回登録 API を呼ぶ
- * - 招待 URL は RESEND_API_KEY 未設定の api が出す `invitation_mail_dev` ログから取る（C7）。
- *   ログの場所は環境変数 E2E_DEV_LOG（e2e/run-local.mjs が dev サーバーの出力を保存して渡す）。
+ *   - member: admin で招待 API を呼び、レスポンスの招待 URL（decisions C31）から初回登録 API を呼ぶ
  * - データは毎回一意な circleLoginId / Email で作るので、掃除はしない。
+ * - 試行回数制限（C33）を避けるため、ブラウザ・API のコンテキストごとにランダムな CF-Connecting-IP を付ける（C34）。
+ *   spec は `@playwright/test` ではなく、ここの test / expect を使う。手動で作るコンテキストには randomIpHeaders() を渡す。
+ *   ローカルの wrangler dev はヘッダーが既にあれば上書きしない。本番では Cloudflare が上書きする。
  */
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import * as fs from 'node:fs';
 import path from 'node:path';
-import { expect, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
+import { test as base, expect, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
+
+export { expect };
 
 export const BASE_URL = 'http://localhost:5173';
+
+/** ランダムな IP（10.0.0.0/8）の CF-Connecting-IP ヘッダー（C34） */
+export function randomIpHeaders(): Record<string, string> {
+  const [a, b, c] = randomBytes(3);
+  return { 'CF-Connecting-IP': `10.${a}.${b}.${c}` };
+}
+
+/** テストごとに既定のコンテキスト（page / request）へランダムな CF-Connecting-IP を付ける（C34） */
+export const test = base.extend({
+  // eslint-disable-next-line no-empty-pattern -- Playwright の fixture は第 1 引数の分割代入が必須
+  extraHTTPHeaders: async ({}, use) => {
+    await use(randomIpHeaders());
+  },
+});
 
 export type Credentials = { circleLoginId: string; email: string; password: string; displayName: string };
 export type SeededCircle = { circleLoginId: string; circleName: string; admin: Credentials };
@@ -61,7 +77,7 @@ export function seedCircle(circleName = 'E2Eサークル'): SeededCircle {
 
 /** ログイン済みの API コンテキスト（Session Cookie を保持する）。使い終わったら dispose() する */
 export async function loggedInApi(creds: Credentials): Promise<APIRequestContext> {
-  const ctx = await playwrightRequest.newContext({ baseURL: BASE_URL });
+  const ctx = await playwrightRequest.newContext({ baseURL: BASE_URL, extraHTTPHeaders: randomIpHeaders() });
   const res = await ctx.post('/api/auth/login', {
     data: { circleLoginId: creds.circleLoginId, email: creds.email, password: creds.password },
   });
@@ -95,43 +111,6 @@ export async function createEventViaApi(
   return (await res.json()).event;
 }
 
-/**
- * dev ログ（decisions C7）から、指定した Invitation の招待 URL を取り出す。
- * 招待 URL・Token はテストの出力に出さない。
- */
-export async function readInvitationUrl(invitationId: string): Promise<string> {
-  const logPath = process.env.E2E_DEV_LOG;
-  if (!logPath) {
-    throw new Error(
-      'E2E_DEV_LOG が未設定です。招待 URL は dev サーバーのログから取るため、`npm run test:e2e`（e2e/run-local.mjs）で実行してください',
-    );
-  }
-  let found: string | undefined;
-  await expect
-    .poll(
-      () => {
-        const text = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
-        for (const line of text.split('\n')) {
-          const start = line.indexOf('{');
-          if (start < 0 || !line.includes('invitation_mail_dev')) continue;
-          try {
-            const entry = JSON.parse(line.slice(start)) as { message?: string; invitationId?: string; invitationUrl?: string };
-            if (entry.message === 'invitation_mail_dev' && entry.invitationId === invitationId) {
-              found = entry.invitationUrl;
-              return true;
-            }
-          } catch {
-            // JSON でない行は無視する
-          }
-        }
-        return false;
-      },
-      { message: `Invitation ${invitationId} の招待 URL が dev ログに出ていること（C7）`, timeout: 10_000 },
-    )
-    .toBe(true);
-  return found!;
-}
-
 /** 招待 URL を、テスト対象の web（baseURL）上のパスに直す（APP_BASE_URL のオリジンは .dev.vars に依存するため） */
 export function invitationPath(invitationUrl: string): string {
   const url = new URL(invitationUrl);
@@ -139,7 +118,7 @@ export function invitationPath(invitationUrl: string): string {
   return url.pathname;
 }
 
-/** admin の API で招待 → dev ログの招待 URL で初回登録し、member を作る */
+/** admin の API で招待 → レスポンスの招待 URL（C31）で初回登録し、member を作る */
 export async function createMemberViaInvitation(
   admin: APIRequestContext,
   circleLoginId: string,
@@ -148,11 +127,11 @@ export async function createMemberViaInvitation(
   const email = `member-${uniqueSuffix()}@example.com`;
   const created = await admin.post('/api/invitations', { data: { email } });
   expect(created.status(), '招待作成 API').toBe(201);
-  const { invitation } = await created.json();
-  const token = decodeURIComponent(invitationPath(await readInvitationUrl(invitation.id)).split('/')[2]);
+  const { invitationUrl } = await created.json();
+  const token = decodeURIComponent(invitationPath(invitationUrl).split('/')[2]);
 
   const password = newPassword();
-  const anon = await playwrightRequest.newContext({ baseURL: BASE_URL });
+  const anon = await playwrightRequest.newContext({ baseURL: BASE_URL, extraHTTPHeaders: randomIpHeaders() });
   try {
     const res = await anon.post(`/api/invitations/${encodeURIComponent(token)}/accept`, {
       data: { displayName, password, passwordConfirmation: password },
