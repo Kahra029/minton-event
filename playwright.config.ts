@@ -24,7 +24,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:5173/api/health',
-    reuseExistingServer: !process.env.CI,
+    // npm run test:e2e（e2e/run-local.mjs）がポートの空きを確認してから dev を起動するので、その dev を使う（CI でも同じ）
+    reuseExistingServer: true,
     timeout: 120_000,
   },
 });
