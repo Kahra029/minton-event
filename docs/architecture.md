@@ -209,6 +209,7 @@ web の app/・components/・lib/・test/）は編集しない。**
 - 日時の表示・入力は `lib/datetime.ts`（API は UTC、表示・入力は JST: B8）
 - フォームは react-hook-form + `@hookform/resolvers/zod` で `packages/types` のスキーマを使う（Frontend の Validation は UX 用。API でも必ず検証される）
 - モバイルファースト（guardrails §12）: レイアウトは `max-w-md`、ボタンは高さ 44px 以上（`Button` の既定）、主要操作を上部に、横スクロールなし
+- ナビゲーション（C39）: ヘッダー（`components/layout/AppLayout.tsx`）の左端「‹」は 1 つ上の画面へ移動する（行き先は `components/layout/upTarget.ts`）。右端のメニュー（`HeaderMenu.tsx`）に「メンバー一覧」（admin のみ）と「ログアウト」。各ページに戻るリンクは置かない
 - shadcn/ui の部品は `components/ui/` にある（button, card, input, label, badge, dialog）。削除確認は `Dialog` を使う
 
 ## 6. テスト

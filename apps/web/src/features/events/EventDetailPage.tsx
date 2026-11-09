@@ -5,7 +5,7 @@
  * 別 Circle・存在しない Event は API が 404 を返し、「見つかりません」を表示する（AC-12）。
  */
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, MapPin, Pencil } from 'lucide-react';
+import { CalendarDays, MapPin, Pencil } from 'lucide-react';
 import type { EventDetail } from '@minton/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,13 +24,6 @@ export function EventDetailPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        to={routes.events()}
-        className="inline-flex h-11 w-fit items-center gap-1 text-sm text-muted-foreground"
-      >
-        <ArrowLeft className="size-4" />
-        イベント一覧
-      </Link>
 
       {detail.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}
       {detail.isError &&

@@ -3,8 +3,8 @@
  * 保存後はイベント詳細へ、削除後はイベント一覧へ遷移する。
  */
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -31,13 +31,6 @@ export function EventEditPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        to={routes.eventDetail(eventId)}
-        className="inline-flex h-11 w-fit items-center gap-1 text-sm text-muted-foreground"
-      >
-        <ArrowLeft className="size-4" />
-        イベント詳細
-      </Link>
       <h1 className="text-lg font-semibold">イベント編集</h1>
 
       {detail.isPending && <p className="text-sm text-muted-foreground">読み込み中…</p>}

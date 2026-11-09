@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { saveLastCircleLoginId } from '@/lib/lastCircle';
 import { makeMe, renderRoute } from '@/test/render';
@@ -29,15 +29,43 @@ describe('RequireAdmin', () => {
     expect(await screen.findByText('この画面を表示する権限がありません')).toBeInTheDocument();
   });
 
-  it('admin はメンバー一覧を表示でき、ナビにメンバーが出る', async () => {
+  it('admin はメンバー一覧を表示でき、メニューにメンバー一覧が出る（C39）', async () => {
     renderRoute('/members', { me: makeMe('admin') });
     expect(await screen.findByRole('heading', { name: 'メンバー一覧' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /メンバー/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'メニュー' }));
+    expect(screen.getByRole('link', { name: 'メンバー一覧' })).toHaveAttribute('href', '/members');
   });
 
-  it('member のナビにはメンバーが出ない', async () => {
+  it('member のメニューにはメンバー一覧が出ず、ログアウトだけ（C39）', async () => {
     renderRoute('/events', { me: makeMe('member') });
     await screen.findByRole('heading', { name: 'イベント一覧' });
-    expect(screen.queryByRole('link', { name: /メンバー/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'メニュー' }));
+    expect(screen.queryByRole('link', { name: 'メンバー一覧' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ログアウト' })).toBeInTheDocument();
+  });
+});
+
+describe('ヘッダー（decisions C39）', () => {
+  it('イベント一覧には「‹」を出さない', async () => {
+    renderRoute('/events', { me: makeMe('member') });
+    await screen.findByRole('heading', { name: 'イベント一覧' });
+    expect(screen.queryByRole('link', { name: 'イベント一覧' })).not.toBeInTheDocument();
+  });
+
+  it('メンバー一覧の「‹」はイベント一覧へ', async () => {
+    renderRoute('/members', { me: makeMe('admin') });
+    await screen.findByRole('heading', { name: 'メンバー一覧' });
+    expect(screen.getByRole('link', { name: 'イベント一覧' })).toHaveAttribute('href', '/events');
+  });
+
+  it('メニューは Escape で閉じる', async () => {
+    renderRoute('/events', { me: makeMe('member') });
+    await screen.findByRole('heading', { name: 'イベント一覧' });
+    const menu = screen.getByRole('button', { name: 'メニュー' });
+    fireEvent.click(menu);
+    expect(menu).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(menu).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'ログアウト' })).not.toBeInTheDocument();
   });
 });

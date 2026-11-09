@@ -94,7 +94,8 @@ describe('LogoutButton', () => {
     const fetchMock = stubFetch((url) => (url === '/api/auth/logout' ? new Response(null, { status: 204 }) : undefined));
     const { router, queryClient } = renderRoute('/events', { me: makeMe() });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'ログアウト' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'メニュー' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ログアウト' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/login/test-circle'));
     expect(fetchMock.mock.calls.some(([u, init]) => String(u) === '/api/auth/logout' && init?.method === 'POST')).toBe(
@@ -110,7 +111,8 @@ describe('LogoutButton', () => {
         : undefined,
     );
     const { router } = renderRoute('/events', { me: makeMe() });
-    fireEvent.click(await screen.findByRole('button', { name: 'ログアウト' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'メニュー' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ログアウト' }));
     expect(await screen.findByText('ログアウトに失敗しました')).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/events');
   });

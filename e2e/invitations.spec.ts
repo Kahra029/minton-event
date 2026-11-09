@@ -29,7 +29,8 @@ test('admin が招待し、招待 URL から初回登録するとイベント一
 
   // admin: メンバー一覧から招待する
   await loginViaUi(page, circle.admin);
-  await page.getByRole('link', { name: /メンバー/ }).click();
+  await page.getByRole('button', { name: 'メニュー' }).click();
+  await page.getByRole('link', { name: 'メンバー一覧' }).click();
   await expect(page).toHaveURL(/\/members$/);
   await expect(page.getByRole('heading', { name: 'メンバー一覧' })).toBeVisible();
   await expectNoHorizontalScroll(page, 'メンバー一覧');

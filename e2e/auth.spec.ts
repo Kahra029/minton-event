@@ -33,6 +33,7 @@ test('ログインしてイベント一覧へ遷移し、ログアウトでロ�
   await expect(page.getByText('E2Eサークル')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
 
+  await page.getByRole('button', { name: 'メニュー' }).click();
   await page.getByRole('button', { name: 'ログアウト' }).click();
   await expect(page).toHaveURL(new RegExp(`/login/${circleLoginId}$`));
   // Session はサーバー側で無効化されている
