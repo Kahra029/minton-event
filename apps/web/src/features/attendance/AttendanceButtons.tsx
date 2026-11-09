@@ -35,9 +35,6 @@ export function AttendanceButtons({ eventId, memberId, currentStatus }: Attendan
 
   return (
     <section aria-label="自分の出欠" className="space-y-2">
-      <p className="text-sm text-muted-foreground">
-        あなたの出欠: <span className="font-semibold text-foreground">{shownStatus ? LABELS[shownStatus] : '未回答'}</span>
-      </p>
       <div className="grid grid-cols-2 gap-3">
         {(['attending', 'absent'] as const).map((status) => {
           const selected = shownStatus === status;

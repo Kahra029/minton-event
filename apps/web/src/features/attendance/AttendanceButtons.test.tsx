@@ -41,7 +41,9 @@ describe('AttendanceButtons', () => {
     vi.stubGlobal('fetch', fetchMock);
     setup();
 
-    expect(screen.getByText('未回答')).toBeInTheDocument();
+    // 未回答: どちらのボタンも押されていない
+    expect(button('参加')).toHaveAttribute('aria-pressed', 'false');
+    expect(button('不参加')).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(button('参加'));
 
     // 確認ダイアログを挟まない
@@ -77,7 +79,7 @@ describe('AttendanceButtons', () => {
 
     fireEvent.click(button('参加'));
     await waitFor(() => expect(button('参加')).toHaveAttribute('aria-pressed', 'true'));
-    expect(screen.getByText('参加', { selector: 'span' })).toBeInTheDocument();
+    expect(button('不参加')).toHaveAttribute('aria-pressed', 'false');
 
     d.resolve(okResponse('attending'));
     await waitFor(() => expect(button('参加')).not.toBeDisabled());
