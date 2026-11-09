@@ -8,7 +8,7 @@ export type Bindings = {
   DB: D1Database;
   /** 試行回数制限（C33 / C34）。wrangler.jsonc の ratelimits（60 秒あたり 10 回） */
   AUTH_RATE_LIMITER: RateLimit;
-  /** 招待 URL の基準（vars。C17 / C30: https://minton-event-api.<account>.workers.dev）。未設定なら招待作成はエラー */
+  /** 招待 URL の基準（C17 / C30: https://minton-event-api.<account>.workers.dev）。本番は Secret、ローカルは .dev.vars（C37）。未設定なら招待作成はエラー */
   APP_BASE_URL?: string;
 };
 

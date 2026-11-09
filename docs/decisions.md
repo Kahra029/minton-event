@@ -89,3 +89,12 @@
 | C32 | メール送信処理 | Resend の送信処理・`MAIL_FROM`・`RESEND_API_KEY`・`DEV_MAIL_LOG` と関連テストを削除する。A4・C7・C15・C16・C23・C29 は廃止。E2E は dev ログではなく画面に表示された招待 URL を使う |
 | C33 | 試行回数制限（C25 の置き換え） | workers.dev では Cloudflare の Rate Limiting ルールが使えないため、Workers の Rate Limiting バインディングで `/api/auth/login` と招待の受け入れに IP 単位の制限を入れる（超えたら 429）。C25 は廃止 |
 | C34 | T10 の細部（C33 / C31） | ①E2E はテストごとにランダムな `CF-Connecting-IP` ヘッダーを付けて回数制限を避ける（アプリ側の変更なし）②login と招待受け入れは別々に数える（key `login:<IP>` / `accept:<IP>`）③IP ヘッダーが無いときは key `unknown` で制限する ④429 は code `TOO_MANY_REQUESTS`、文言「試行回数が多すぎます。しばらくしてから再度お試しください」。ボディ・Token の検証より前に全リクエストを数える ⑤招待作成のレスポンスは `{ invitation, invitationUrl }`（201）⑥招待 URL の案内文は「この URL は再表示できません。コピーして本人に渡してください」。コピーは navigator.clipboard.writeText で、成功したらボタンを「コピーしました」にする |
+
+## 追加決定（2026-11-09）: リポジトリ公開・デモ
+
+| # | 項目 | 決定 |
+|---|---|---|
+| C35 | 仕様書 | `.orca/drops/badminton_*.md` の 3 本を `docs/specs/` に置いてリポジトリに含める |
+| C36 | デモ環境 | 本番・minton-scheduler とは別の Cloudflare アカウントに、デモ専用の Worker と D1 を作る。データの定期リセットの有無・方法は未決 |
+| C37 | `APP_BASE_URL` の本番値 | 本番 URL をリポジトリに書かないため、wrangler.jsonc の vars から外し、`wrangler secret put APP_BASE_URL` で設定する。ローカルは今どおり `.dev.vars`（C17 / C30 の内容は変えない） |
+| C38 | ライセンス | 付けない |

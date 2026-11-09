@@ -5,7 +5,7 @@
 構成の説明は [architecture.md](architecture.md) の「本番の構成」。
 
 - D1 は作成済み（`minton-event`、`database_id` は `apps/api/wrangler.jsonc` に設定済み: C12 / C14）
-- Secret は不要（メール送信は C32 で廃止）。設定する値は `APP_BASE_URL`（vars）だけ
+- 設定する値は `APP_BASE_URL` だけ。本番 URL をリポジトリに書かないため Secret で入れる（C37。メール送信の Secret は C32 で廃止）
 - 試行回数制限（C33）は `wrangler.jsonc` の `ratelimits` でデプロイ時に有効になる。ダッシュボードでの設定は不要
 
 コマンドはリポジトリのルートで実行する（`apps/api` で実行するものは明記する）。
@@ -28,29 +28,30 @@ npx wrangler d1 migrations list DB --remote   # 未適用が無いこと
 cd ../..
 ```
 
-## 2. APP_BASE_URL を設定する
-
-招待 URL はこの値から作る（C17。未設定だと招待作成が 500 になる）。この Worker の URL を入れる。
-
-```jsonc
-// apps/api/wrangler.jsonc
-"vars": {
-  "APP_BASE_URL": "https://minton-event-api.<account>.workers.dev"
-}
-```
-
-- `<account>` はアカウントの workers.dev サブドメイン（ダッシュボードの Workers & Pages、または初回の `wrangler deploy` の出力で確認できる）
-- 末尾の `/` は付けても付けなくてよい
-- ダッシュボードで変数を直接編集しても、次の `wrangler deploy` で `wrangler.jsonc` の値に戻る。値は `wrangler.jsonc` で管理する
-
-## 3. デプロイする
+## 2. デプロイする
 
 ```sh
 npm run deploy   # = npm run build（apps/web/dist を作る）→ apps/api で wrangler deploy
 ```
 
-出力に `https://minton-event-api.<account>.workers.dev` と、バインディング（`DB`、`AUTH_RATE_LIMITER`、`APP_BASE_URL`）が出ることを確認する。
-`APP_BASE_URL` の値が出力の URL と一致しない場合は 2. に戻って直し、もう一度 `npm run deploy` する。
+出力に `https://minton-event-api.<account>.workers.dev` と、バインディング（`DB`、`AUTH_RATE_LIMITER`）が出ることを確認する。
+`<account>` はアカウントの workers.dev サブドメイン。
+
+## 3. APP_BASE_URL を設定する
+
+招待 URL はこの値から作る（C17。未設定だと招待作成が 500 になる）。2. の出力の URL を Secret として入れる（C37）。
+Secret は次回以降の `wrangler deploy` でも消えないので、最初の 1 回だけでよい。
+
+```sh
+cd apps/api
+npx wrangler secret put APP_BASE_URL
+# → https://minton-event-api.<account>.workers.dev を入力（末尾の / は付けても付けなくてよい）
+npx wrangler secret list   # APP_BASE_URL があること
+cd ../..
+```
+
+- 本番 URL は `wrangler.jsonc` に書かない（公開リポジトリのため。C37）
+- Secret を入れると Worker の新しいバージョンが自動で反映されるので、再デプロイは不要
 
 ## 4. 初期 Circle / admin を作る（seed --remote）
 

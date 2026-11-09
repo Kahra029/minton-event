@@ -29,11 +29,8 @@
       "simple": { "limit": 10, "period": 60 }
     }
   ],
-  // 本番の値はデプロイ時にユーザーが入れる。ローカルは .dev.vars で上書きする（.dev.vars.example 参照）
-  "vars": {
-    // 招待 URL の基準（C17 / C30。この Worker の URL: https://minton-event-api.<account>.workers.dev）。未設定なら招待作成はエラー
-    "APP_BASE_URL": ""
-  },
+  // APP_BASE_URL（招待 URL の基準: C17 / C30）は vars に置かない。本番 URL をリポジトリに書かないため
+  // `wrangler secret put APP_BASE_URL` で設定する（C37）。ローカルは .dev.vars
   "observability": {
     "enabled": true,
     "logs": {

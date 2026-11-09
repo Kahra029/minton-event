@@ -266,7 +266,7 @@ curl http://localhost:5173/api/health               # → {"ok":true}（Vite pro
 - Worker 1 つ（`minton-event-api`）で Web と API を配信し、`https://minton-event-api.<account>.workers.dev` で公開する（独自ドメイン・Pages は使わない）
 - `apps/api/wrangler.jsonc` の `assets`: `directory` は `../web/dist`（`npm run build` の出力）、`not_found_handling: single-page-application`
   （ファイルが無いパスは index.html）、`run_worker_first: ["/api/*"]`（`/api/*` は必ず Worker が処理し、存在しない API は JSON の 404）
-- 同一オリジンなので Cookie・CSRF の方式はローカルと同じ。`APP_BASE_URL` はこの workers.dev の URL
+- 同一オリジンなので Cookie・CSRF の方式はローカルと同じ。`APP_BASE_URL` はこの workers.dev の URL（本番は `wrangler secret put` で設定し、リポジトリに書かない: C37）
 - `wrangler.jsonc` の `database_id` は本番の D1（C14）。デプロイ手順は [deploy.md](deploy.md)（`npm run deploy` = build してから wrangler deploy）
 
 ## 8. DB / Migration
