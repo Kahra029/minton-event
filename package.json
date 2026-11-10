@@ -1,0 +1,31 @@
+{
+  "name": "minton-event",
+  "version": "0.0.0",
+  "private": true,
+  "description": "バドミントンサークル出欠管理アプリ (monorepo)",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build --workspace apps/web",
+    "deploy": "npm run build && npm run deploy --workspace apps/api",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.e2e.json",
+    "lint": "eslint .",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "node e2e/run-local.mjs",
+    "db:migrate:local": "npm run db:migrate:local --workspace apps/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2"
+  }
+}

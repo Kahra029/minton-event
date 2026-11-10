@@ -1,0 +1,5 @@
+# ローカル開発用の変数。`cp .dev.vars.example .dev.vars` して使う（.dev.vars は gitignore 済み）。
+
+# 招待 URL の基準（decisions C17）。ローカルは Vite の dev サーバーのオリジン。未設定なら招待作成はエラー。
+# 本番は `wrangler secret put APP_BASE_URL` で workers.dev の URL を入れる（decisions C37 / docs/deploy.md）
+APP_BASE_URL=http://localhost:5173
